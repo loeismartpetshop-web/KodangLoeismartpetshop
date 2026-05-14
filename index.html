@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loei Smart - Line Catalog</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- PWA / Add to Home Screen (iOS + Android) -->
+    <link rel="icon" type="image/png" href="LOGO.PNG">
+    <link rel="shortcut icon" type="image/png" href="LOGO.PNG">
+    <link rel="apple-touch-icon" href="LOGO.PNG">
+    <link rel="apple-touch-icon" sizes="180x180" href="LOGO.PNG">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="SmartPetShop">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="SmartPetShop">
+    <meta name="theme-color" content="#2563EB">
+    <link rel="manifest" href="manifest.json">
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -289,7 +302,14 @@
 .delivery-tabs { display: flex; gap: 8px; margin-bottom: 12px; background: #f3f4f6; padding: 4px; border-radius: 10px; }
 .del-tab { flex: 1; padding: 10px; border: none; border-radius: 8px; background: transparent; cursor: pointer; font-size: 14px; font-weight: bold; color: #6b7280; transition: all 0.2s; }
 .del-tab.active { background: #fff; color: var(--theme-color); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-#mapContainer { height: 220px; width: 100%; border-radius: 12px; margin-bottom: 12px; z-index: 1; border: 1px solid #e5e7eb; }
+#mapContainer { height: 280px; width: 100%; border-radius: 12px; margin-bottom: 12px; z-index: 1; border: 1px solid #e5e7eb; overflow: hidden; background: #e5e7eb; }
+/* Pin info card (Line Man style) — แสดงใต้แผนที่ */
+.pin-info-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.pin-info-title { font-size: 16px; font-weight: bold; color: #1f2937; margin-bottom: 4px; }
+.pin-info-sub { font-size: 12px; color: #6b7280; margin-bottom: 10px; }
+.pin-info-address { font-size: 14px; color: #374151; line-height: 1.5; min-height: 21px; word-wrap: break-word; overflow-wrap: anywhere; }
+.pin-info-address.loading { color: #9ca3af; font-style: italic; }
+.pin-info-address.error { color: #dc2626; }
 
 /* PAYMENT UI (Bank vs PromptPay vs COD) */
 .pay-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -420,18 +440,38 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 .admin-add-prod-btn { width: 100%; padding: 12px; background: #fff; border: 2px dashed #e5e7eb; border-radius: 10px; cursor: pointer; font-size: 14px; color: #9ca3af; margin-top: 4px; font-family: inherit; }
 .admin-add-prod-btn:hover { background: #f9fafb; color: #374151; border-color: #9ca3af; }
 
-#saveAdminBtn { width: 100%; padding: 15px; background: #111; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; font-family: inherit; transition: background 0.2s; box-shadow: 0 -4px 15px rgba(0,0,0,0.1); }
-#saveAdminBtn:hover { background: #1f2937; }
-#saveAdminBtn:disabled { background: #6b7280; cursor: not-allowed; }
-#saveAdminBtn.saving { background: #fbbf24; color: #78350f; }
-#saveAdminBtn.success { background: #16a34a; }
-#saveAdminBtn.error { background: #dc2626; }
+/* =====================================================
+   SVG ICON UTILITIES
+   ===================================================== */
+.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.16em; fill: none; stroke: currentColor; flex-shrink: 0; }
+.ic-fill { fill: currentColor; stroke: none; }
+.ic-lg { width: 1.25em; height: 1.25em; }
+.ic-xl { width: 1.5em; height: 1.5em; }
+.ic-2x { width: 2em; height: 2em; }
+.ic-3x { width: 3em; height: 3em; }
+.ic-spin { animation: ic-spin 0.9s linear infinite; }
+@keyframes ic-spin { to { transform: rotate(360deg); } }
 
-/* ปุ่มลูกศร toggle (ขึ้น/ลง) — overlay มุมขวาของปุ่มบันทึก */
-.save-btn-wrap { position: sticky; bottom: 0; margin-top: 10px; z-index: 100; }
-.save-btn-wrap #saveAdminBtn { margin-top: 0; }
-#scrollBottomBtn { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.3); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, transform 0.2s; padding: 0; line-height: 1; }
-#scrollBottomBtn:hover { background: rgba(255,255,255,0.3); transform: translateY(-50%) scale(1.08); }
+#saveAdminBtn { width: 100%; padding: 15px 18px; background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #fff; border: none; border-radius: 14px; font-size: 16px; font-weight: bold; cursor: pointer; font-family: inherit; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; box-shadow: 0 8px 22px rgba(17,24,39,0.28), 0 2px 6px rgba(17,24,39,0.18); display: inline-flex; align-items: center; justify-content: center; gap: 9px; letter-spacing: 0.2px; }
+#saveAdminBtn:hover { background: linear-gradient(135deg, #374151 0%, #1f2937 100%); transform: translateY(-1px); box-shadow: 0 10px 26px rgba(17,24,39,0.32), 0 3px 8px rgba(17,24,39,0.2); }
+#saveAdminBtn:active { transform: translateY(0); }
+#saveAdminBtn:disabled { background: #9ca3af; cursor: not-allowed; transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+#saveAdminBtn.saving { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #78350f; }
+#saveAdminBtn.success { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+#saveAdminBtn.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+#saveAdminBtn .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
+
+/* save bar — sticky, มี scroll-toggle อยู่นอกบาร์ขวามือ */
+.save-btn-wrap { position: sticky; bottom: 0; margin-top: 10px; z-index: 100; display: flex; align-items: center; gap: 12px; }
+.save-btn-wrap #saveAdminBtn { margin-top: 0; flex: 1; min-width: 0; }
+#scrollBottomBtn { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #374151; border: 1px solid #e5e7eb; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s, transform 0.2s, box-shadow 0.2s, color 0.15s; padding: 0; box-shadow: 0 4px 14px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06); }
+#scrollBottomBtn:hover { background: #f9fafb; color: #111827; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.08); }
+#scrollBottomBtn:active { transform: translateY(0); }
+#scrollBottomBtn .ic { width: 20px; height: 20px; stroke-width: 2.4; }
+#scrollBottomBtn .ic-up { display: none; }
+#scrollBottomBtn[data-dir="up"] .ic-down { display: none; }
+#scrollBottomBtn[data-dir="up"] .ic-up { display: inline-block; }
+
 
 .footer-spacer { height: 40px; }
 .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(17,24,39,0.9); color: #fff; padding: 10px 22px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; z-index: 99999; pointer-events: none; white-space: nowrap; }
@@ -589,7 +629,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         </div>
         <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาสินค้า...">
         <button class="cart-btn" id="cartBtn" title="ตะกร้าสินค้า">
-            🛒<span class="cart-badge" id="cartBadge">0</span>
+            <svg class="ic ic-lg"><use href="#ic-cart"/></svg><span class="cart-badge" id="cartBadge">0</span>
         </button>
     </div>
 </nav>
@@ -601,8 +641,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     <div class="cart-drawer" id="cartDrawer" data-view="cart" data-pay="cod">
         <div class="drawer-view cart-view">
             <div class="drawer-header">
-                <h3>🛒 ตะกร้าสินค้า</h3>
-                <button class="drawer-close" data-action="closeCart">✕</button>
+                <h3><svg class="ic ic-lg"><use href="#ic-cart"/></svg> ตะกร้าสินค้า</h3>
+                <button class="drawer-close" data-action="closeCart" aria-label="ปิด"><svg class="ic ic-lg"><use href="#ic-close"/></svg></button>
             </div>
             <div class="cart-customer-id" id="custIdDisplay"></div>
             <div class="cart-items" id="cartItemsEl"></div>
@@ -615,7 +655,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <div class="drawer-header">
                 <button class="drawer-back" data-action="backToCart" aria-label="กลับ">‹</button>
                 <h3>ชำระเงิน</h3>
-                <button class="drawer-close" data-action="closeCart">✕</button>
+                <button class="drawer-close" data-action="closeCart" aria-label="ปิด"><svg class="ic ic-lg"><use href="#ic-close"/></svg></button>
             </div>
             
             <div class="checkout-body" id="checkoutBody">
@@ -628,8 +668,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     
                     <div id="delDeliveryPanel">
                         <div id="mapContainer"></div>
-                        <button type="button" class="btn-order" id="confirmPinBtn" style="margin-bottom:10px; background:#16a34a; width:100%; border-radius:8px;">📍 ยืนยันตำแหน่งหมุด</button>
-                        <button type="button" id="currentLocationBtn" style="margin-bottom:10px; width:100%; padding:8px; border-radius:8px; border:1px solid #2563eb; color:#2563eb; background:#fff; font-weight:bold; cursor:pointer;">🧭 ใช้ตำแหน่งปัจจุบันของฉัน</button>
+                        <div class="pin-info-card">
+                            <div class="pin-info-title">ตำแหน่งหมุด</div>
+                            <div class="pin-info-sub">ลากหมุดบนแผนที่เพื่อกำหนดตำแหน่งจัดส่ง</div>
+                            <div class="pin-info-address" id="pinAddressPreview">— ยังไม่ได้เลือกตำแหน่ง —</div>
+                        </div>
+                        <button type="button" id="currentLocationBtn" style="margin-bottom:10px; width:100%; padding:10px; border-radius:8px; border:1px solid #2563eb; color:#2563eb; background:#fff; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px;"><svg class="ic ic-lg"><use href="#ic-compass"/></svg> ใช้ตำแหน่งปัจจุบันของฉัน</button>
+                        <button type="button" class="btn-order" id="confirmPinBtn" style="margin-bottom:14px; background:#16a34a; width:100%; border-radius:8px; padding:12px; font-size:15px; display:inline-flex; align-items:center; justify-content:center; gap:8px;"><svg class="ic ic-lg"><use href="#ic-pin"/></svg> ยืนยันตำแหน่งหมุด</button>
                         
                         <label class="checkout-label">ชื่อ-นามสกุล <span class="req">*</span></label>
                         <input class="checkout-input" type="text" id="coName" placeholder="ชื่อ-นามสกุล">
@@ -640,7 +685,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     </div>
                     
                     <div id="delPickupPanel" style="display:none; padding:15px; background:#f9fafb; border-radius:10px; text-align:center; border:1px dashed #cbd5e1;">
-                        <h4 style="color:#1e293b; margin-bottom:5px;">🏠 รับสินค้าที่ร้าน</h4>
+                        <h4 style="color:#1e293b; margin-bottom:5px; display:inline-flex; align-items:center; gap:6px;"><svg class="ic ic-lg"><use href="#ic-home"/></svg> รับสินค้าที่ร้าน</h4>
                         <p style="font-size:13px; color:#64748b;">เตรียมรหัสคำสั่งซื้อเพื่อยืนยันกับพนักงาน</p>
                         <label class="checkout-label" style="text-align:left; margin-top:10px;">ชื่อผู้รับ / เบอร์โทร <span class="req">*</span></label>
                         <input class="checkout-input" type="text" id="pickupContact" placeholder="ระบุชื่อ และ เบอร์โทรติดต่อ">
@@ -650,9 +695,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 <div class="checkout-section">
                     <div class="checkout-section-title">วิธีชำระเงิน</div>
                     <div class="pay-tabs">
-                        <div class="pay-tab active" data-action="setPayment" data-type="bank">🏦 โอนเข้าบัญชี</div>
-                        <div class="pay-tab" data-action="setPayment" data-type="qr">📱 สแกน QR</div>
-                        <div class="pay-tab" data-action="setPayment" data-type="cod">💵 เก็บปลายทาง</div>
+                        <div class="pay-tab active" data-action="setPayment" data-type="bank"><svg class="ic ic-lg"><use href="#ic-bank"/></svg> โอนเข้าบัญชี</div>
+                        <div class="pay-tab" data-action="setPayment" data-type="qr"><svg class="ic ic-lg"><use href="#ic-qr"/></svg> สแกน QR</div>
+                        <div class="pay-tab" data-action="setPayment" data-type="cod"><svg class="ic ic-lg"><use href="#ic-money"/></svg> เก็บปลายทาง</div>
                     </div>
 
                     <div id="payBankPanel" class="pay-panel active">
@@ -664,13 +709,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                         <div class="qr-display" id="qrDisplay" style="display:none;">
                             <div class="qr-header">
                                 <div>ยอดที่ต้องชำระ:<br><span class="qr-amount-text" id="qrAmountDisplay">฿0</span></div>
-                                <div class="qr-timer-text">⏳ <span id="qrTimer">30:00</span></div>
+                                <div class="qr-timer-text"><svg class="ic"><use href="#ic-loading"/></svg> <span id="qrTimer">30:00</span></div>
                             </div>
                             <div style="text-align:center; background:#fff; padding:16px; border-radius:10px; border:1px solid #e5e7eb;">
                                 <div id="qrBankNameDisplay" style="font-weight:bold; font-size:13px; color:#374151; margin-bottom:10px;"></div>
                                 <img id="qrImg" src="" alt="QR Code" style="max-width:200px; width:100%; display:none;">
                                 <div id="qrFallback" style="display:none; flex-direction:column; align-items:center; gap:8px; padding:20px; color:#9ca3af;">
-                                    <div style="font-size:40px;">📷</div>
+                                    <svg class="ic ic-3x"><use href="#ic-camera"/></svg>
                                     <div style="font-size:13px;">ยังไม่มีรูป QR Code</div>
                                 </div>
                             </div>
@@ -680,19 +725,19 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
                     <div id="payCodPanel" class="pay-panel">
                         <div style="padding:14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; text-align:center;">
-                            <div style="font-size:14px; color:#16a34a; font-weight:bold; margin-bottom:4px;">💵 เก็บเงินปลายทาง</div>
+                            <div style="font-size:14px; color:#16a34a; font-weight:bold; margin-bottom:4px; display:inline-flex; align-items:center; gap:6px;"><svg class="ic ic-lg"><use href="#ic-money"/></svg> เก็บเงินปลายทาง</div>
                             <div style="font-size:12px; color:#15803d;">ชำระเงินสดเมื่อได้รับ/มารับสินค้า ไม่ต้องแนบสลิป</div>
                         </div>
                     </div>
 
                     <div id="slipUploadWrap" style="margin-top:15px;">
                         <label class="slip-upload-label" id="slipUploadLabel">
-                            <span id="slipUploadText">📎 แนบหลักฐานสลิป <span class="req">*</span></span>
+                            <span id="slipUploadText"><svg class="ic ic-lg"><use href="#ic-clip"/></svg> แนบหลักฐานสลิป <span class="req">*</span></span>
                             <input type="file" accept="image/*" id="slipInput">
                         </label>
                         <div class="slip-preview-wrap" id="slipPreviewWrap" style="display:none;">
                             <img class="slip-preview" id="slipPreview" alt="สลิป">
-                            <button class="slip-remove" id="slipRemoveBtn" type="button">✕</button>
+                            <button class="slip-remove" id="slipRemoveBtn" type="button" aria-label="ลบสลิป"><svg class="ic"><use href="#ic-close"/></svg></button>
                         </div>
                     </div>
                 </div>
@@ -714,8 +759,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 <div class="auth-modal" id="adminAuthModal">
     <div class="auth-drawer">
         <div class="drawer-header">
-            <h3>🔐 เข้าสู่ระบบแอดมิน</h3>
-            <button class="drawer-close" data-action="closeAdminAuth">✕</button>
+            <h3><svg class="ic ic-lg"><use href="#ic-lock"/></svg> เข้าสู่ระบบแอดมิน</h3>
+            <button class="drawer-close" data-action="closeAdminAuth" aria-label="ปิด"><svg class="ic ic-lg"><use href="#ic-close"/></svg></button>
         </div>
         <input type="password" class="admin-input" id="adminPwInput" placeholder="รหัสผ่าน" autocomplete="current-password">
         <button class="btn-order" id="verifyAdminBtn" style="margin-top:4px;">เข้าสู่ระบบ</button>
@@ -725,8 +770,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 <div class="admin-modal" id="adminModal">
     <div class="admin-panel">
         <div class="admin-header">
-            <h3>⚙ หลังบ้าน (Admin)</h3>
-            <button class="drawer-close" data-action="closeAdmin">✕</button>
+            <h3><svg class="ic ic-lg"><use href="#ic-gear"/></svg> หลังบ้าน (Admin)</h3>
+            <button class="drawer-close" data-action="closeAdmin" aria-label="ปิด"><svg class="ic ic-lg"><use href="#ic-close"/></svg></button>
         </div>
 
         <div class="admin-section">
@@ -735,7 +780,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 <img id="logoPreviewAdmin" src="LOGO.PNG" style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid #e5e7eb;flex-shrink:0;">
                 <div id="logoNoAdmin" style="display:none;width:60px;height:60px;background:#f3f4f6;border-radius:8px;border:1px solid #e5e7eb;align-items:center;justify-content:center;font-size:20px;color:#fff;background:linear-gradient(135deg,#2563EB,#7C3AED);flex-shrink:0;font-weight:700;">LS</div>
                 <div class="admin-img-controls">
-                    <label class="admin-upload-label" id="logoUploadLabel">📷 เปลี่ยนโลโก้<input type="file" accept="image/*" id="logoUploadInput"></label>
+                    <label class="admin-upload-label" id="logoUploadLabel"><svg class="ic"><use href="#ic-camera"/></svg> เปลี่ยนโลโก้<input type="file" accept="image/*" id="logoUploadInput"></label>
                     <div style="font-size:11px;color:#9ca3af;margin-top:2px;">แสดงบน navbar ตอนเข้าเว็บ</div>
                 </div>
             </div>
@@ -745,9 +790,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <div class="admin-section-title">โลโก้หน้าโหลด (Splash Screen)</div>
             <div class="admin-img-section">
                 <img id="splashLogoPreviewAdmin" src="LOGO.PNG" style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid #e5e7eb;flex-shrink:0;">
-                <div id="splashLogoNoAdmin" style="display:none;width:60px;height:60px;background:#f3f4f6;border-radius:8px;border:1px dashed #d1d5db;align-items:center;justify-content:center;font-size:24px;color:#9ca3af;flex-shrink:0;">🖼</div>
+                <div id="splashLogoNoAdmin" style="display:none;width:60px;height:60px;background:#f3f4f6;border-radius:8px;border:1px dashed #d1d5db;align-items:center;justify-content:center;color:#9ca3af;flex-shrink:0;"><svg class="ic ic-2x"><use href="#ic-image"/></svg></div>
                 <div class="admin-img-controls">
-                    <label class="admin-upload-label" id="splashLogoUploadLabel">📷 เปลี่ยนโลโก้ Splash<input type="file" accept="image/*" id="splashLogoUploadInput"></label>
+                    <label class="admin-upload-label" id="splashLogoUploadLabel"><svg class="ic"><use href="#ic-camera"/></svg> เปลี่ยนโลโก้ Splash<input type="file" accept="image/*" id="splashLogoUploadInput"></label>
                     <div style="font-size:11px;color:#9ca3af;margin-top:2px;">แสดงตอนโหลดเว็บครั้งแรก (แยกจากโลโก้ navbar)</div>
                 </div>
             </div>
@@ -756,20 +801,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         <div class="admin-section">
             <div class="admin-section-title">รูปภาพโปรโมชั่น (เด้งตอนเข้าเว็บ — เลื่อนซ้าย/ขวาได้)</div>
             <div id="promoImgsList" class="promo-imgs-list"></div>
-            <label class="admin-upload-label" id="promoUploadLabel" style="margin-top:8px;">＋ เพิ่มรูปโปรโมชั่น<input type="file" accept="image/*" id="promoUploadInput" multiple></label>
+            <label class="admin-upload-label" id="promoUploadLabel" style="margin-top:8px;"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่มรูปโปรโมชั่น<input type="file" accept="image/*" id="promoUploadInput" multiple></label>
             <div style="font-size:11px;color:#9ca3af;margin-top:4px;">เพิ่มได้หลายรูป — กดที่รูปเพื่อลบ</div>
         </div>
 
         <div class="admin-section">
             <div class="admin-section-title">ตั้งค่าบัญชีธนาคาร (โอนเงิน) — สูงสุด 5 บัญชี</div>
             <div id="adminBankList"></div>
-            <button id="addBankBtn" style="width:100%;padding:11px;background:#fff;border:2px dashed #d1d5db;border-radius:10px;cursor:pointer;font-size:14px;color:#6b7280;font-family:inherit;margin-top:4px;" onclick="adminAddBank()">＋ เพิ่มบัญชีธนาคาร</button>
+            <button id="addBankBtn" style="width:100%;padding:11px;background:#fff;border:2px dashed #d1d5db;border-radius:10px;cursor:pointer;font-size:14px;color:#6b7280;font-family:inherit;margin-top:4px; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="adminAddBank()"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่มบัญชีธนาคาร</button>
         </div>
 
         <div class="admin-section">
             <div class="admin-section-title">ตั้งค่า QR Code — สูงสุด 5 รายการ</div>
             <div id="adminQrList"></div>
-            <button id="addQrBtn" style="width:100%;padding:11px;background:#fff;border:2px dashed #d1d5db;border-radius:10px;cursor:pointer;font-size:14px;color:#6b7280;font-family:inherit;margin-top:4px;" onclick="adminAddQr()">＋ เพิ่ม QR Code</button>
+            <button id="addQrBtn" style="width:100%;padding:11px;background:#fff;border:2px dashed #d1d5db;border-radius:10px;cursor:pointer;font-size:14px;color:#6b7280;font-family:inherit;margin-top:4px; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="adminAddQr()"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่ม QR Code</button>
         </div>
 
         <div class="admin-section">
@@ -804,8 +849,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <div>
                 <div class="admin-field-label" style="margin-bottom:12px;">ปรับแต่งรูปร่าง Card</div>
                 <div class="layout-tabs">
-                    <button class="layout-tab-btn active" id="layoutTabMob" data-action="switchLayoutTab" data-tab="mob">📱 มือถือ</button>
-                    <button class="layout-tab-btn" id="layoutTabDsk" data-action="switchLayoutTab" data-tab="dsk">🖥 คอมพิวเตอร์</button>
+                    <button class="layout-tab-btn active" id="layoutTabMob" data-action="switchLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-mobile"/></svg> มือถือ</button>
+                    <button class="layout-tab-btn" id="layoutTabDsk" data-action="switchLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-desktop"/></svg> คอมพิวเตอร์</button>
                 </div>
                 <div class="layout-tab-pane active" id="layoutPane-mob">
                     <div class="ui-sliders-grid">
@@ -816,7 +861,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                         <div class="slider-row"><div class="slider-label">Columns <span id="valColsMob">2</span></div><input type="range" id="sliderColsMob" min="1" max="2" value="2" step="1"></div>
                         <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapMob">12px</span></div><input type="range" id="sliderGapMob" min="4" max="40" value="12"></div>
                     </div>
-                    <button class="layout-save-tab-btn" id="saveLayoutMobBtn" data-action="saveLayoutTab" data-tab="mob">💾 บันทึกตั้งค่ามือถือ</button>
+                    <button class="layout-save-tab-btn" id="saveLayoutMobBtn" data-action="saveLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่ามือถือ</button>
                 </div>
                 <div class="layout-tab-pane" id="layoutPane-dsk">
                     <div class="ui-sliders-grid">
@@ -827,20 +872,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                         <div class="slider-row"><div class="slider-label">Columns <span id="valColsDsk">4</span></div><input type="range" id="sliderColsDsk" min="2" max="6" value="4" step="1"></div>
                         <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapDsk">18px</span></div><input type="range" id="sliderGapDsk" min="4" max="60" value="18"></div>
                     </div>
-                    <button class="layout-save-tab-btn" id="saveLayoutDskBtn" data-action="saveLayoutTab" data-tab="dsk">💾 บันทึกตั้งค่าคอมพิวเตอร์</button>
+                    <button class="layout-save-tab-btn" id="saveLayoutDskBtn" data-action="saveLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่าคอมพิวเตอร์</button>
                 </div>
                 <div class="card-preview-strip">
                     <div class="card-preview-strip-title">ตัวอย่าง Card</div>
                     <div class="card-preview-wrap">
                         <div class="card-preview-mini" id="cardPreviewMini">
-                            <div class="card-preview-inner" id="cardPreviewInner">🐾</div>
+                            <div class="card-preview-inner" id="cardPreviewInner"><svg class="ic ic-2x"><use href="#ic-paw"/></svg></div>
                             <div class="card-preview-line"></div>
                             <div class="card-preview-line short"></div>
                             <div class="card-preview-btn" id="cardPreviewBtn"></div>
                         </div>
                     </div>
                 </div>
-                <button class="layout-save-tab-btn" id="saveTemplateDraftBtn" style="margin-top:12px;">✓ บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)</button>
+                <button class="layout-save-tab-btn" id="saveTemplateDraftBtn" style="margin-top:12px;"><svg class="ic"><use href="#ic-check"/></svg> บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)</button>
             </div>
         </div>
 
@@ -867,19 +912,164 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         <div class="admin-section">
             <div class="admin-section-title">จัดการสินค้า</div>
             <div id="adminCategoryList"></div>
-            <button class="admin-add-cat-btn" data-action="addCategory">＋ เพิ่มหมวดหมู่หลัก</button>
+            <button class="admin-add-cat-btn" data-action="addCategory"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่มหมวดหมู่หลัก</button>
         </div>
 
         <div class="save-btn-wrap">
-            <button id="saveAdminBtn">💾 บันทึกทั้งหมด</button>
-            <button id="scrollBottomBtn" type="button" aria-label="เลื่อนลง/ขึ้น">⬇</button>
+            <button id="saveAdminBtn"><svg class="ic ic-lg"><use href="#ic-save"/></svg><span class="save-label">บันทึกทั้งหมด</span></button>
+            <button id="scrollBottomBtn" type="button" aria-label="เลื่อนลง/ขึ้น" data-dir="down">
+                <svg class="ic ic-down"><use href="#ic-chev-down"/></svg>
+                <svg class="ic ic-up"><use href="#ic-chev-up"/></svg>
+            </button>
         </div>
     </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- =====================================================
+     SVG ICON SPRITE — Vector icons แทน emoji
+     ใช้ผ่าน: <svg class="ic"><use href="#ic-XXX"/></svg>
+     หรือ JS: iconHTML('XXX') / iconHTML('XXX','ic ic-lg')
+     ===================================================== -->
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- save (floppy disk) -->
+    <symbol id="ic-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+      <polyline points="17 21 17 13 7 13 7 21"/>
+      <polyline points="7 3 7 8 15 8"/>
+    </symbol>
+    <!-- check -->
+    <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </symbol>
+    <!-- close / cross -->
+    <symbol id="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"/>
+      <line x1="6" y1="6" x2="18" y2="18"/>
+    </symbol>
+    <!-- loading / hourglass (spinning ring) -->
+    <symbol id="ic-loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" opacity="0.95"/>
+    </symbol>
+    <!-- chevron down -->
+    <symbol id="ic-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </symbol>
+    <!-- chevron up -->
+    <symbol id="ic-chev-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 15 12 9 18 15"/>
+    </symbol>
+    <!-- plus -->
+    <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </symbol>
+    <!-- cart -->
+    <symbol id="ic-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="21" r="1.4"/>
+      <circle cx="18" cy="21" r="1.4"/>
+      <path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8a2 2 0 0 0 2-1.5L21 7H6"/>
+    </symbol>
+    <!-- home -->
+    <symbol id="ic-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12 12 3l9 9"/>
+      <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/>
+    </symbol>
+    <!-- bank -->
+    <symbol id="ic-bank" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10 12 4l9 6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="5" y1="10" x2="5" y2="18"/>
+      <line x1="10" y1="10" x2="10" y2="18"/>
+      <line x1="14" y1="10" x2="14" y2="18"/>
+      <line x1="19" y1="10" x2="19" y2="18"/>
+      <line x1="3" y1="20" x2="21" y2="20"/>
+    </symbol>
+    <!-- qr / smartphone -->
+    <symbol id="ic-qr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <line x1="14" y1="14" x2="17" y2="14"/>
+      <line x1="14" y1="17" x2="14" y2="21"/>
+      <line x1="17" y1="17" x2="21" y2="17"/>
+      <line x1="21" y1="14" x2="21" y2="21"/>
+      <line x1="17" y1="21" x2="21" y2="21"/>
+    </symbol>
+    <!-- mobile -->
+    <symbol id="ic-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="6" y="2" width="12" height="20" rx="2.5"/>
+      <line x1="11" y1="18" x2="13" y2="18"/>
+    </symbol>
+    <!-- money / cash -->
+    <symbol id="ic-money" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2"/>
+      <circle cx="12" cy="12" r="2.6"/>
+      <line x1="5" y1="9" x2="5" y2="15"/>
+      <line x1="19" y1="9" x2="19" y2="15"/>
+    </symbol>
+    <!-- map pin -->
+    <symbol id="ic-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22s7-7.5 7-13a7 7 0 1 0-14 0c0 5.5 7 13 7 13z"/>
+      <circle cx="12" cy="9" r="2.5"/>
+    </symbol>
+    <!-- compass / locate -->
+    <symbol id="ic-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <polygon points="16 8 13 14 8 16 11 10 16 8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- camera -->
+    <symbol id="ic-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <circle cx="12" cy="13" r="3.5"/>
+    </symbol>
+    <!-- paperclip -->
+    <symbol id="ic-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21.44 11.05 12.25 20.24a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 1 1-2.83-2.83l8.49-8.48"/>
+    </symbol>
+    <!-- package box -->
+    <symbol id="ic-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </symbol>
+    <!-- desktop monitor -->
+    <symbol id="ic-desktop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </symbol>
+    <!-- image / picture -->
+    <symbol id="ic-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </symbol>
+    <!-- lock (secure / login) -->
+    <symbol id="ic-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2"/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+    </symbol>
+    <!-- gear / settings -->
+    <symbol id="ic-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </symbol>
+    <!-- paw -->
+    <symbol id="ic-paw" viewBox="0 0 24 24" fill="currentColor">
+      <ellipse cx="5.5" cy="11" rx="2" ry="2.6"/>
+      <ellipse cx="18.5" cy="11" rx="2" ry="2.6"/>
+      <ellipse cx="9" cy="6.5" rx="2" ry="2.6"/>
+      <ellipse cx="15" cy="6.5" rx="2" ry="2.6"/>
+      <path d="M12 12c-3 0-5.5 2-6.2 4.5C5.2 18.7 7 20 9.2 19.7c.9-.1 1.8-.4 2.8-.4s1.9.3 2.8.4c2.2.3 4-1 3.4-3.2C17.5 14 15 12 12 12z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Longdo Map API v3 — ใส่ API Key ของคุณตรงนี้ -->
+<script src="https://api.longdo.com/map3/?key=32344a31ec7f657884db5a210abb2df4"></script>
 <script>
 (function() {
     'use strict';
@@ -896,6 +1086,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
+
+    // 🗺️ Longdo Map API Key — แก้ที่นี่จุดเดียว (ต้อง sync กับ <script src> ใน head/body ด้วย)
+    const LONGDO_MAP_KEY = '32344a31ec7f657884db5a210abb2df4';
+    const LONGDO_DEFAULT_LAT = 17.49428;
+    const LONGDO_DEFAULT_LON = 101.71323;
+
+    /* ============================================================
+       ICON HELPER — สร้าง <svg> string จาก symbol id ใน sprite
+       ใช้ใน JS template literal: ${iconHTML('save')} หรือ iconHTML('check','ic-lg')
+       ============================================================ */
+    function iconHTML(name, extraClass) {
+        const cls = extraClass ? ('ic ' + extraClass) : 'ic';
+        return '<svg class="' + cls + '"><use href="#ic-' + name + '"/></svg>';
+    }
 
     const SETTINGS_KEYS = [
         'theme.color','theme.useGradient','theme.gradientDeg',
@@ -1413,7 +1617,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     function renderPromoAdminList() {
         const el = $('promoImgsList'); if (!el) return;
         if (!promoImgs.length) { el.innerHTML = '<div class="promo-imgs-empty">ยังไม่มีรูปโปรโมชั่น — กดปุ่มด้านล่างเพื่อเพิ่ม</div>'; return; }
-        el.innerHTML = promoImgs.map((src, i) => `<div class="promo-img-thumb"><img src="${esc(src)}" alt="โปร ${i+1}"><button type="button" class="del-btn" data-action="delPromoImg" data-idx="${i}" aria-label="ลบ">✕</button></div>`).join('');
+        el.innerHTML = promoImgs.map((src, i) => `<div class="promo-img-thumb"><img src="${esc(src)}" alt="โปร ${i+1}"><button type="button" class="del-btn" data-action="delPromoImg" data-idx="${i}" aria-label="ลบ">${iconHTML('close')}</button></div>`).join('');
     }
     function delPromoImg(i) {
         if (i < 0 || i >= promoImgs.length) return;
@@ -1428,9 +1632,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const defLabel = selectedSizes[p.id] || (p.sizes[0] ? p.sizes[0].label : '');
         const found = p.sizes.find(s => s.label === defLabel);
         const defPrice = found ? found.price : (p.sizes[0] ? p.sizes[0].price : 0);
-        const imgHtml = p.image ? `<img src="${esc(p.image)}" style="width:100%; height:220px; object-fit:contain; border-radius:12px; margin-bottom:15px; border:1px solid #e5e7eb; background:#fff;">` : '<div style="height:220px; display:flex; align-items:center; justify-content:center; font-size:50px; background:#f9fafb; border-radius:12px; margin-bottom:15px;">📦</div>';
+        const imgHtml = p.image ? `<img src="${esc(p.image)}" style="width:100%; height:220px; object-fit:contain; border-radius:12px; margin-bottom:15px; border:1px solid #e5e7eb; background:#fff;">` : `<div style="height:220px; display:flex; align-items:center; justify-content:center; color:#cbd5e1; background:#f9fafb; border-radius:12px; margin-bottom:15px;">${iconHTML('package','ic-3x')}</div>`;
         const sizeHtml = p.sizes.map(s => `<button class="size-btn${s.label === defLabel ? ' selected' : ''}" onclick="selectSizePopup(this, '${esc(p.id)}', '${esc(s.label)}')">${esc(s.label)}</button>`).join('');
-        const stockHtml = p.inStock ? `<div style="color:#16a34a; font-weight:bold; font-size:12px; margin-bottom:10px;">✓ มีสินค้า ${p.stock > 0 ? `(เหลือ ${p.stock} ชิ้น)` : ''}</div>` : `<div style="color:#dc2626; font-weight:bold; font-size:12px; margin-bottom:10px;">✗ สินค้าหมด</div>`;
+        const stockHtml = p.inStock ? `<div style="color:#16a34a; font-weight:bold; font-size:12px; margin-bottom:10px; display:inline-flex; align-items:center; gap:4px;">${iconHTML('check')} มีสินค้า ${p.stock > 0 ? `(เหลือ ${p.stock} ชิ้น)` : ''}</div>` : `<div style="color:#dc2626; font-weight:bold; font-size:12px; margin-bottom:10px; display:inline-flex; align-items:center; gap:4px;">${iconHTML('close')} สินค้าหมด</div>`;
 
         $('popupBody').innerHTML = `
             ${imgHtml}
@@ -1446,7 +1650,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     <button class="qty-btn" style="border-radius:6px;" onclick="changeQtyPopup('${esc(p.id)}', 1)">+</button>
                 </div>
                 <div style="display:flex; gap:8px; flex:1; margin-left:15px;">
-                    <button class="btn-cart" style="flex:1; border-radius:10px; padding:12px;" onclick="addToCart('${esc(p.id)}'); closeProductPopup();" ${!p.inStock?'disabled':''}>🛒 เพิ่ม</button>
+                    <button class="btn-cart" style="flex:1; border-radius:10px; padding:12px; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="addToCart('${esc(p.id)}'); closeProductPopup();" ${!p.inStock?'disabled':''}>${iconHTML('cart')} เพิ่ม</button>
                     <button class="btn-order" style="flex:2; border-radius:10px; padding:12px;" onclick="orderNow('${esc(p.id)}'); closeProductPopup();" ${!p.inStock?'disabled':''}>ซื้อเลย</button>
                 </div>
             </div>
@@ -1466,26 +1670,130 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     };
     window.changeQtyPopup = function(pid, delta) { changeQty(pid, delta); $('popupQty-' + pid).textContent = quantities[pid]; };
 
+    /* ============================================================
+       MAP — Longdo Map API v3 (Reverse Geocoding)
+       ============================================================ */
+    // state: เก็บที่อยู่ที่ดึงมาล่าสุดจาก Longdo
+    let lastReverseAddress = '';
+    let reverseGeocodeTimer = null;
+
+    // เรียก Longdo REST API → ดึงรายละเอียดที่อยู่จาก lat/lon
+    function reverseGeocode(lat, lon) {
+        const preview = $('pinAddressPreview');
+        if (preview) { preview.className = 'pin-info-address loading'; preview.textContent = 'กำลังค้นหาที่อยู่...'; }
+
+        const url = `https://api.longdo.com/map/services/address?lon=${lon}&lat=${lat}&locale=th&key=${LONGDO_MAP_KEY}`;
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                // สร้างข้อความที่อยู่แบบอ่านง่าย: ถนน + ตำบล + อำเภอ + จังหวัด + รหัสไปรษณีย์
+                const parts = [];
+                if (data.aoi) parts.push(data.aoi);          // ชื่อสถานที่/หมู่บ้าน (ถ้ามี)
+                if (data.road) parts.push('ถนน' + data.road);
+                if (data.subdistrict) parts.push('ต.' + data.subdistrict);
+                if (data.district) parts.push('อ.' + data.district);
+                if (data.province) parts.push('จ.' + data.province);
+                if (data.postcode) parts.push(String(data.postcode));
+                const addressText = parts.length ? parts.join(' ') : 'ไม่พบข้อมูลที่อยู่บริเวณนี้';
+                lastReverseAddress = parts.length ? addressText : '';
+
+                if (preview) {
+                    preview.className = 'pin-info-address';
+                    preview.textContent = addressText;
+                }
+            })
+            .catch(err => {
+                console.error('Longdo reverse geocode error:', err);
+                if (preview) {
+                    preview.className = 'pin-info-address error';
+                    preview.textContent = 'ไม่สามารถดึงข้อมูลที่อยู่ได้';
+                }
+                lastReverseAddress = '';
+            });
+    }
+
+    // debounce: ลากหมุดบ่อยๆ อย่ายิง API ทุกครั้ง
+    function scheduleReverseGeocode(lat, lon) {
+        if (reverseGeocodeTimer) clearTimeout(reverseGeocodeTimer);
+        reverseGeocodeTimer = setTimeout(() => reverseGeocode(lat, lon), 350);
+    }
+
     function initMap() {
-        if(map || typeof L === 'undefined') return;
-        map = L.map('mapContainer').setView([17.486, 101.722], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        marker = L.marker([17.486, 101.722], {draggable: true}).addTo(map);
-        $('currentLocationBtn').onclick = () => {
-            if(navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                    map.setView([lat, lng], 16); marker.setLatLng([lat, lng]);
-                });
-            } else { showToast('เบราว์เซอร์ไม่รองรับ'); }
-        };
-        $('confirmPinBtn').onclick = () => {
-            const pos = marker.getLatLng(); const addr = $('coAddress');
-            const pinText = ` [พิกัดหมุด: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}]`;
-            if(!addr.value.includes('[พิกัดหมุด:')) { addr.value += pinText; } 
-            else { addr.value = addr.value.replace(/\s\[พิกัดหมุด:.*\]/, pinText); }
+        if (map || typeof longdo === 'undefined') return;
+
+        // สร้างแผนที่ที่พิกัดเริ่มต้น (จังหวัดเลย)
+        map = new longdo.Map({
+            placeholder: document.getElementById('mapContainer'),
+            language: 'th',
+            location: { lon: LONGDO_DEFAULT_LON, lat: LONGDO_DEFAULT_LAT },
+            zoom: 15,
+            lastView: false
+        });
+
+        // สร้างหมุดแบบลากได้
+        marker = new longdo.Marker(
+            { lon: LONGDO_DEFAULT_LON, lat: LONGDO_DEFAULT_LAT },
+            {
+                title: 'ตำแหน่งจัดส่ง',
+                detail: 'ลากหมุดเพื่อกำหนดตำแหน่งจัดส่ง',
+                draggable: true
+            }
+        );
+        map.Overlays.add(marker);
+
+        // event: เมื่อปล่อย overlay (marker) หลังลาก → ดึงพิกัด → reverse geocode
+        map.Event.bind('overlayDrop', function(overlay) {
+            const loc = overlay.location();
+            if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+                scheduleReverseGeocode(loc.lat, loc.lon);
+            }
+        });
+
+        // event: รอแผนที่พร้อม → ดึงที่อยู่ของตำแหน่งเริ่มต้นมาแสดง
+        map.Event.bind('ready', function() {
+            reverseGeocode(LONGDO_DEFAULT_LAT, LONGDO_DEFAULT_LON);
+        });
+
+        // ปุ่ม "ใช้ตำแหน่งปัจจุบันของฉัน"
+        $('currentLocationBtn').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showToast('เบราว์เซอร์ไม่รองรับการระบุตำแหน่ง');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(pos => {
+                const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                map.location({ lon: lon, lat: lat }, true);
+                map.zoom(16, true);
+                marker.move({ lon: lon, lat: lat });
+                scheduleReverseGeocode(lat, lon);
+            }, err => {
+                showToast('ไม่สามารถระบุตำแหน่งได้: ' + (err.message || 'unknown'));
+            }, { enableHighAccuracy: true, timeout: 10000 });
+        });
+
+        // ปุ่ม "ยืนยันตำแหน่งหมุด" → เติมที่อยู่ลง textarea + ต่อท้ายด้วยพิกัด
+        $('confirmPinBtn').addEventListener('click', () => {
+            const loc = marker.location();
+            if (!loc) { showToast('ไม่พบตำแหน่งหมุด'); return; }
+            const lat = loc.lat, lon = loc.lon;
+            const addr = $('coAddress');
+            const pinText = ` [พิกัดหมุด: ${lat.toFixed(5)}, ${lon.toFixed(5)}]`;
+
+            // ดึงข้อความเดิม (ตัดพิกัดเก่าทิ้งก่อน) เพื่อไม่ให้ซ้อน
+            let baseText = (addr.value || '').replace(/\s*\[พิกัดหมุด:.*?\]/, '').trim();
+
+            // ถ้ายังไม่มีข้อความเดิม + มีที่อยู่จาก reverse geocode → เติมให้
+            if (!baseText && lastReverseAddress) {
+                baseText = lastReverseAddress;
+            }
+            // ถ้ามีข้อความเดิมอยู่แล้ว แต่ไม่มีที่อยู่จาก geocode ในนั้น → เติมต่อท้าย (ก่อนพิกัด)
+            else if (lastReverseAddress && !baseText.includes(lastReverseAddress)) {
+                baseText = baseText ? (baseText + ' ' + lastReverseAddress) : lastReverseAddress;
+            }
+
+            addr.value = baseText + pinText;
             showToast('ปักหมุดสำเร็จ');
-        };
+        });
     }
 
     /* ---- render bank list in checkout (selectable + copy) ---- */
@@ -1504,7 +1812,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             div.dataset.bidx = i;
             div.innerHTML = `
                 <div class="bank-radio"></div>
-                ${b.logo ? `<img src="${b.logo}" class="bank-logo">` : `<div class="bank-logo" style="background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:20px;">🏦</div>`}
+                ${b.logo ? `<img src="${b.logo}" class="bank-logo">` : `<div class="bank-logo" style="background:#e5e7eb;display:flex;align-items:center;justify-content:center;color:#6b7280;">${iconHTML('bank','ic-lg')}</div>`}
                 <div class="bank-info">
                     <div class="bank-name">${esc(b.name)}</div>
                     <div class="bank-acc">${esc(b.acc)}</div>
@@ -1539,7 +1847,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             div.className = 'qr-bank-item' + (i === selectedQrIdx ? ' selected' : '');
             div.innerHTML = `
                 <div class="bank-radio"></div>
-                ${q.logo ? `<img src="${q.logo}" class="bank-logo">` : `<div class="bank-logo" style="background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:20px;">📱</div>`}
+                ${q.logo ? `<img src="${q.logo}" class="bank-logo">` : `<div class="bank-logo" style="background:#e5e7eb;display:flex;align-items:center;justify-content:center;color:#6b7280;">${iconHTML('qr','ic-lg')}</div>`}
                 <div class="bank-info"><div class="bank-name">${esc(q.name)}</div></div>`;
             div.addEventListener('click', () => {
                 selectedQrIdx = i;
@@ -1578,7 +1886,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const labelStyle = 'font-size:11px;color:#6b7280;font-weight:600;margin-bottom:3px;display:block;';
             wrap.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed #e5e7eb;">
-                    <span style="font-weight:bold;font-size:13px;">🏦 ธนาคารที่ ${i+1}</span>
+                    <span style="font-weight:bold;font-size:13px; display:inline-flex; align-items:center; gap:6px;">${iconHTML('bank')} ธนาคารที่ ${i+1}</span>
                     ${bankData.length > 1 ? `<button type="button" onclick="adminRemoveBank(${i})" style="background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">ลบ</button>` : ''}
                 </div>
                 <div style="margin-bottom:8px;">
@@ -1594,7 +1902,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     <input type="text" class="admin-input" placeholder="เช่น นาย Loei Smart" value="${esc(b.owner)}" oninput="bankData[${i}].owner=this.value">
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
-                    <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">📷 โลโก้ธนาคาร
+                    <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">${iconHTML('camera')} โลโก้ธนาคาร
                         <input type="file" accept="image/*" onchange="adminBankLogoUpload(event,${i})">
                     </label>
                     ${b.logo ? `<img src="${b.logo}" style="height:36px;width:36px;object-fit:contain;border-radius:6px;border:1px solid #e5e7eb;background:#fff;">` : '<span style="font-size:11px;color:#9ca3af;">ยังไม่มีโลโก้</span>'}
@@ -1619,7 +1927,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const f = e.target.files[0]; if (!f) return;
         bankData[i].logo = await fileToBase64(f);
         renderAdminBanks();
-        showToast('อัปโหลดโลโก้แล้ว ✓');
+        showToast('อัปโหลดโลโก้แล้ว');
     };
 
     /* ---- Admin: render QR admin list ---- */
@@ -1631,19 +1939,19 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             wrap.style.cssText = 'background:#f9fafb;padding:12px;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:10px;';
             wrap.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-weight:bold;font-size:13px;">📱 QR ที่ ${i+1}</span>
+                    <span style="font-weight:bold;font-size:13px; display:inline-flex; align-items:center; gap:6px;">${iconHTML('qr')} QR ที่ ${i+1}</span>
                     ${qrData.length > 1 ? `<button type="button" onclick="adminRemoveQr(${i})" style="background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">ลบ</button>` : ''}
                 </div>
                 <input type="text" class="admin-input" placeholder="ชื่อ (เช่น PromptPay กสิกร)" value="${esc(q.name)}" style="margin-bottom:6px;" oninput="qrData[${i}].name=this.value">
                 <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-top:4px;">
                     <div style="display:flex;flex-direction:column;gap:6px;">
-                        <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">📷 โลโก้ธนาคาร
+                        <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">${iconHTML('camera')} โลโก้ธนาคาร
                             <input type="file" accept="image/*" onchange="adminQrLogoUpload(event,${i})">
                         </label>
                         ${q.logo ? `<img src="${q.logo}" style="height:32px;width:32px;object-fit:contain;border-radius:6px;border:1px solid #e5e7eb;">` : ''}
                     </div>
                     <div style="display:flex;flex-direction:column;gap:6px;">
-                        <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">🖼 รูป QR Code
+                        <label class="admin-upload-label" style="display:inline-flex;font-size:12px;padding:6px 10px;background:#fff;">${iconHTML('image')} รูป QR Code
                             <input type="file" accept="image/*" onchange="adminQrImgUpload(event,${i})">
                         </label>
                         ${q.qr ? `<img src="${q.qr}" style="height:56px;width:56px;object-fit:contain;border-radius:6px;border:1px solid #e5e7eb;">` : ''}
@@ -1667,12 +1975,12 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     window.adminQrLogoUpload = async function(e, i) {
         const f = e.target.files[0]; if (!f) return;
         qrData[i].logo = await fileToBase64(f);
-        renderAdminQrs(); showToast('อัปโหลดโลโก้ QR แล้ว ✓');
+        renderAdminQrs(); showToast('อัปโหลดโลโก้ QR แล้ว');
     };
     window.adminQrImgUpload = async function(e, i) {
         const f = e.target.files[0]; if (!f) return;
         qrData[i].qr = await fileToBase64(f);
-        renderAdminQrs(); showToast('อัปโหลด QR Code แล้ว ✓');
+        renderAdminQrs(); showToast('อัปโหลด QR Code แล้ว');
     };
 
     function startQrTimer() {
@@ -1802,7 +2110,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const dis = p.inStock ? '' : ' disabled';
         const btnBg = useGradient ? `background:linear-gradient(${gradientDeg}deg, ${currentTheme}, ${shiftColor(currentTheme,60)})` : `background:${currentTheme}`;
 
-        const imgHtml = p.image ? `<img class="card-img" src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : '<div class="card-img-placeholder">📦</div>';
+        const imgHtml = p.image ? `<img class="card-img" src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : `<div class="card-img-placeholder">${iconHTML('package','ic-3x')}</div>`;
 
         card.innerHTML =
             `<div class="card-inner">${imgHtml}</div>` +
@@ -1818,7 +2126,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 '</div></div>' +
                 '<div class="card-actions">' +
                     `<button class="btn-order"${dis} style="${btnBg}" data-action="orderNow" data-pid="${esc(p.id)}">สั่งซื้อ</button>` +
-                    `<button class="btn-cart"${dis} data-action="addToCart" data-pid="${esc(p.id)}">+ ใส่ตะกร้า</button>` +
+                    `<button class="btn-cart"${dis} data-action="addToCart" data-pid="${esc(p.id)}">${iconHTML('plus')} ใส่ตะกร้า</button>` +
                 '</div>' +
             '</div>';
         return card;
@@ -1855,7 +2163,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const s = p.sizes.find(x => x.label === size); const price = s ? s.price : 0;
         const ex = cart.find(i => i.pid === pid && i.size === size);
         if (ex) ex.qty += qty; else cart.push({ pid, name: p.name, size, qty, price });
-        updateCartBadge(); showToast('เพิ่มลงตะกร้าแล้ว ✓');
+        updateCartBadge(); showToast('เพิ่มลงตะกร้าแล้ว');
     }
     function orderNow(pid) { addToCart(pid); openCart(); }
     function updateCartBadge() { $('cartBadge').textContent = cart.reduce((s, i) => s + i.qty, 0); }
@@ -1863,7 +2171,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     function closeCart() { $('cartModal').classList.remove('open'); resetCheckoutState(); }
     function renderCartItems() {
         const el = $('cartItemsEl');
-        if (!cart.length) { el.innerHTML = '<div class="cart-empty">🛒 ตะกร้าว่างเปล่า</div>'; $('cartTotalEl').textContent = '฿0'; return; }
+        if (!cart.length) { el.innerHTML = `<div class="cart-empty" style="display:flex; flex-direction:column; align-items:center; gap:8px;"><div style="color:#cbd5e1;">${iconHTML('cart','ic-3x')}</div>ตะกร้าว่างเปล่า</div>`; $('cartTotalEl').textContent = '฿0'; return; }
         let total = 0; el.innerHTML = '';
         cart.forEach((item, idx) => {
             if (item.checked === undefined) item.checked = true;
@@ -1875,7 +2183,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 `<input type="checkbox" class="cart-item-check" data-action="toggleCartItem" data-idx="${idx}" ${item.checked ? 'checked' : ''}>` +
                 `<div class="cart-item-info"><div class="cart-item-name">${esc(item.name)}</div><div class="cart-item-sub">${esc(item.size)} — ฿${item.price.toLocaleString()}/ชิ้น</div></div>` +
                 `<div class="cart-item-qty"><button class="cart-item-qty-btn" data-action="cartQty" data-idx="${idx}" data-delta="-1">−</button><span class="cart-item-qty-num">${item.qty}</span><button class="cart-item-qty-btn" data-action="cartQty" data-idx="${idx}" data-delta="1">+</button></div>` +
-                `<div class="cart-item-price">฿${sub.toLocaleString()}</div><button class="cart-item-remove" data-action="removeCartItem" data-idx="${idx}">✕</button>`;
+                `<div class="cart-item-price">฿${sub.toLocaleString()}</div><button class="cart-item-remove" data-action="removeCartItem" data-idx="${idx}" aria-label="ลบรายการ">${iconHTML('close')}</button>`;
             el.appendChild(row);
         });
         $('cartTotalEl').textContent = '฿' + total.toLocaleString();
@@ -1895,7 +2203,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         
         renderBanks();
         renderQrList();
-        setTimeout(() => { initMap(); map.invalidateSize(); }, 300); 
+        setTimeout(() => { initMap(); if (map && typeof map.resize === 'function') map.resize(); }, 300); 
         const total = checkedItems.reduce((s, i) => s + i.price * i.qty, 0);
         const qrAmtEl = $('qrAmountDisplay'); if (qrAmtEl) qrAmtEl.textContent = '฿' + total.toLocaleString();
     }
@@ -1917,7 +2225,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const reader = new FileReader();
         reader.onload = (e) => {
             slipDataUrl = e.target.result; $('slipPreview').src = slipDataUrl;
-            $('slipPreviewWrap').style.display = ''; $('slipUploadText').textContent = '✓ เปลี่ยนสลิป';
+            $('slipPreviewWrap').style.display = ''; $('slipUploadText').innerHTML = iconHTML('check','ic-lg') + ' เปลี่ยนสลิป';
             $('slipUploadLabel').classList.remove('invalid');
         };
         reader.readAsDataURL(file);
@@ -1926,7 +2234,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         slipDataUrl = null;
         const input = $('slipInput'); if (input) input.value = '';
         const prev = $('slipPreviewWrap'); if (prev) prev.style.display = 'none';
-        const txt = $('slipUploadText'); if (txt) txt.innerHTML = '📎 แนบหลักฐานสลิป <span class="req">*</span>';
+        const txt = $('slipUploadText'); if (txt) txt.innerHTML = iconHTML('clip','ic-lg') + ' แนบหลักฐานสลิป <span class="req">*</span>';
     }
     function validateCheckout() {
         const isDelivery = document.querySelector('.del-tab[data-type="delivery"]').classList.contains('active');
@@ -1975,7 +2283,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         };
 
         if (isGasConfigured()) {
-            try { await enqueue('submitOrder', payload); showToast('ส่งคำสั่งซื้อสำเร็จ ✓'); } 
+            try { await enqueue('submitOrder', payload); showToast('ส่งคำสั่งซื้อสำเร็จ'); } 
             catch (err) { console.warn('[submitOrder]', err); showToast('ส่งไม่สำเร็จ — จะ retry อัตโนมัติ'); }
         } else { console.log('[ORDER]', payload); showToast('ส่งคำสั่งซื้อแล้ว (โหมดทดลอง)'); }
 
@@ -2049,7 +2357,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         document.body.classList.toggle('tpl-square', tpl === 'square');
         document.body.classList.toggle('tpl-double', tpl === 'double');
         updatePreviewCard();
-        showToast('เปลี่ยน Template แล้ว ✓');
+        showToast('เปลี่ยน Template แล้ว');
     }
 
     function syncSliders() {
@@ -2088,7 +2396,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         L.gap = parseInt($('sliderGap' + (tab === 'mob' ? 'Mob' : 'Dsk')).value) || L.gap;
         applyLayoutVars();
         const btn = $(tab === 'mob' ? 'saveLayoutMobBtn' : 'saveLayoutDskBtn');
-        if (btn) { btn.classList.add('saved'); btn.textContent = '✓ บันทึกแล้ว'; setTimeout(() => { btn.classList.remove('saved'); btn.textContent = tab === 'mob' ? '💾 บันทึกตั้งค่ามือถือ' : '💾 บันทึกตั้งค่าคอมพิวเตอร์'; }, 1500); }
+        if (btn) { btn.classList.add('saved'); btn.innerHTML = iconHTML('check') + ' บันทึกแล้ว'; setTimeout(() => { btn.classList.remove('saved'); btn.innerHTML = iconHTML('save') + ' ' + (tab === 'mob' ? 'บันทึกตั้งค่ามือถือ' : 'บันทึกตั้งค่าคอมพิวเตอร์'); }, 1500); }
         showToast('บันทึกเลเอาท์ ' + (tab === 'mob' ? 'มือถือ' : 'คอม') + ' แล้ว (กด บันทึกทั้งหมด เพื่อ sync)');
     }
 
@@ -2137,7 +2445,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                         `<input class="admin-input" type="text" value="${esc(cat.name)}" data-action="updateCatName" data-cat-id="${esc(cat.id)}">` +
                     '</div>' +
                     `<div id="admin-prods-${esc(cat.id)}"></div>` +
-                    `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(cat.id)}">＋ เพิ่มสินค้าในหมวดนี้</button>` +
+                    `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(cat.id)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
                 '</div>';
             el.appendChild(block);
             const prodsEl = $('admin-prods-' + cat.id);
@@ -2169,21 +2477,21 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             '<div class="admin-field-row"><span class="admin-field-label">รูปภาพ</span>' +
                 '<div class="admin-img-section">' +
                     `<img class="admin-img-preview" id="imgprev-${esc(p.id)}" src="${hasImg ? esc(p.image) : ''}" style="display:${hasImg ? '' : 'none'}">` +
-                    `<div class="admin-img-placeholder" id="imgno-${esc(p.id)}" style="display:${hasImg ? 'none' : 'flex'}">📦</div>` +
+                    `<div class="admin-img-placeholder" id="imgno-${esc(p.id)}" style="display:${hasImg ? 'none' : 'flex'}">${iconHTML('package','ic-2x')}</div>` +
                     '<div class="admin-img-controls">' +
-                        `<label class="admin-upload-label" id="uplabel-${esc(p.id)}">📷 เลือกรูป<input type="file" accept="image/*" data-action="handleImgUpload" data-pid="${esc(p.id)}"></label>` +
+                        `<label class="admin-upload-label" id="uplabel-${esc(p.id)}">${iconHTML('camera')} เลือกรูป<input type="file" accept="image/*" data-action="handleImgUpload" data-pid="${esc(p.id)}"></label>` +
                         `<input class="admin-input" type="text" value="${urlVal}" placeholder="วาง URL หรือ Google Drive link" style="font-size:12px;" data-action="updateImgUrl" data-pid="${esc(p.id)}">` +
-                        '<div style="font-size:10px;color:#9ca3af;margin-top:3px;">📎 วาง Google Drive link ได้เลย — แปลงให้อัตโนมัติ</div>' +
+                        `<div style="font-size:10px;color:#9ca3af;margin-top:3px; display:inline-flex; align-items:center; gap:4px;">${iconHTML('clip')} วาง Google Drive link ได้เลย — แปลงให้อัตโนมัติ</div>` +
                     '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="admin-field-row"><span class="admin-field-label">ขนาด &amp; ราคา</span>' +
                 '<div class="admin-sizes-head"><span>ขนาด</span><span>ราคา (฿)</span><span></span></div>' +
                 `<div id="sizes-${esc(p.id)}">${p.sizes.map((s, i) => buildAdminSizeRow(p.id, i, s)).join('')}</div>` +
-                `<button class="admin-add-size-btn" data-action="addSize" data-pid="${esc(p.id)}">＋ เพิ่มขนาด</button>` +
+                `<button class="admin-add-size-btn" data-action="addSize" data-pid="${esc(p.id)}">${iconHTML('plus')} เพิ่มขนาด</button>` +
             '</div>' +
             '<div class="admin-stock-row">' +
-                `<button class="admin-stock-btn ${p.inStock ? 'instock' : 'outstock'}" id="stockbtn-${esc(p.id)}" data-action="toggleStock" data-pid="${esc(p.id)}">${p.inStock ? '✓ มีสินค้า' : '✗ สินค้าหมด'}</button>` +
+                `<button class="admin-stock-btn ${p.inStock ? 'instock' : 'outstock'}" id="stockbtn-${esc(p.id)}" data-action="toggleStock" data-pid="${esc(p.id)}">${iconHTML(p.inStock ? 'check' : 'close')} ${p.inStock ? 'มีสินค้า' : 'สินค้าหมด'}</button>` +
                 '<div class="admin-stock-qty-wrap"><label>จำนวนคงเหลือ</label>' +
                     `<input class="admin-stock-qty-input" type="number" min="0" value="${p.stock || 0}" placeholder="0" data-action="updateStock" data-pid="${esc(p.id)}">` +
                     '<span style="font-size:11px;color:#9ca3af;">ชิ้น</span>' +
@@ -2196,7 +2504,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         return '<div class="admin-size-row">' +
             `<input class="admin-size-input" type="text" value="${esc(s.label)}" placeholder="ขนาด" data-action="updateSizeLabel" data-pid="${esc(pid)}" data-idx="${idx}">` +
             `<input class="admin-size-input" type="number" value="${s.price}" placeholder="ราคา" data-action="updateSizePrice" data-pid="${esc(pid)}" data-idx="${idx}">` +
-            `<button class="admin-size-del" data-action="removeSize" data-pid="${esc(pid)}" data-idx="${idx}" title="ลบขนาดนี้">✕</button>` +
+            `<button class="admin-size-del" data-action="removeSize" data-pid="${esc(pid)}" data-idx="${idx}" title="ลบขนาดนี้" aria-label="ลบ">${iconHTML('close')}</button>` +
         '</div>';
     }
 
@@ -2219,17 +2527,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (!isGasConfigured()) { p.image = dataUrl; showToast('โหลดรูปแล้ว (โหมดทดลอง)'); return; }
 
         const label = $('uplabel-' + pid);
-        if (label) { label.classList.add('uploading'); label.textContent = '⏳ กำลังอัปโหลด...'; }
+        if (label) { label.classList.add('uploading'); label.innerHTML = iconHTML('loading','ic-spin') + ' กำลังอัปโหลด...'; }
         try {
             const result = await enqueue('uploadImage', { productId: pid, productName: p.name, imageBase64: dataUrl });
             if (result && result.url) {
                 p.image = result.url; prev.src = result.url;
                 const urlInput = document.querySelector(`#admin-prod-${pid} input[placeholder*="URL"]`);
                 if (urlInput) urlInput.value = result.url;
-                showToast('อัปโหลดรูปสำเร็จ ✓');
+                showToast('อัปโหลดรูปสำเร็จ');
             }
         } catch (err) { console.warn('[uploadImage]', err); showToast('อัปโหลดไม่สำเร็จ'); p.image = dataUrl; } 
-        finally { if (label) { label.classList.remove('uploading'); label.innerHTML = '📷 เลือกรูป<input type="file" accept="image/*" data-action="handleImgUpload" data-pid="' + esc(pid) + '">'; } }
+        finally { if (label) { label.classList.remove('uploading'); label.innerHTML = iconHTML('camera') + ' เลือกรูป<input type="file" accept="image/*" data-action="handleImgUpload" data-pid="' + esc(pid) + '">'; } }
     }
     function updateSizeLabel(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) p.sizes[idx].label = val; }
     function updateSizePrice(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) p.sizes[idx].price = parseInt(val, 10) || 0; }
@@ -2244,7 +2552,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const p = products.find(x => x.id === pid); if (!p) return; p.inStock = !p.inStock;
         const btn = $('stockbtn-' + pid); if (!btn) return;
         btn.className = 'admin-stock-btn ' + (p.inStock ? 'instock' : 'outstock');
-        btn.textContent = p.inStock ? '✓ มีสินค้า' : '✗ สินค้าหมด';
+        btn.innerHTML = iconHTML(p.inStock ? 'check' : 'close') + ' ' + (p.inStock ? 'มีสินค้า' : 'สินค้าหมด');
     }
     function addProduct(catId) {
         const newId = 'p' + Date.now();
@@ -2280,7 +2588,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     `<input class="admin-input" type="text" value="${esc(newCat.name)}" data-action="updateCatName" data-cat-id="${esc(newId)}">` +
                 '</div>' +
                 `<div id="admin-prods-${esc(newId)}"></div>` +
-                `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(newId)}">＋ เพิ่มสินค้าในหมวดนี้</button>` +
+                `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(newId)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
             '</div>';
         el.appendChild(block); renderNav();
         const nameInput = block.querySelector('input[data-action="updateCatName"]');
@@ -2293,9 +2601,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     /* ============================================================
        SAVE ADMIN
        ============================================================ */
+    // helper: เปลี่ยนสถานะปุ่มบันทึกแบบมี icon (กัน SVG ใน button หาย จาก textContent)
+    function setSaveBtnState(btn, icon, label, spin) {
+        if (!btn) return;
+        const ic = spin ? iconHTML(icon, 'ic-lg ic-spin') : iconHTML(icon, 'ic-lg');
+        btn.innerHTML = ic + '<span class="save-label">' + label + '</span>';
+    }
+
     async function saveAdmin() {
         const btn = $('saveAdminBtn');
-        btn.disabled = true; btn.classList.add('saving'); btn.textContent = '⏳ กำลังจัดการไฟล์รูปภาพ...';
+        btn.disabled = true; btn.classList.add('saving');
+        setSaveBtnState(btn, 'loading', 'กำลังจัดการไฟล์รูปภาพ...', true);
 
         // แก้บัก Stock เวลาพิมพ์แล้วกดเซฟทันที
         document.querySelectorAll('.admin-stock-qty-input').forEach(el => {
@@ -2307,9 +2623,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         renderCatalog(); renderNav();
 
         if (!isGasConfigured()) {
-            btn.classList.remove('saving'); btn.classList.add('success'); btn.textContent = '✓ บันทึกแล้ว (โหมดทดลอง)';
+            btn.classList.remove('saving'); btn.classList.add('success');
+            setSaveBtnState(btn, 'check', 'บันทึกแล้ว (โหมดทดลอง)');
             showToast('บันทึกในเครื่อง — GAS ยังไม่ได้ตั้งค่า');
-            setTimeout(() => { btn.disabled = false; btn.classList.remove('success'); btn.textContent = '💾 บันทึกทั้งหมด'; closeAdmin(); }, 1500);
+            setTimeout(() => {
+                btn.disabled = false; btn.classList.remove('success');
+                setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
+                closeAdmin();
+            }, 1500);
             return;
         }
 
@@ -2348,7 +2669,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             await Promise.all(tasks);
             promoImgData = promoImgs[0] || '';
 
-            btn.textContent = '⏳ กำลังบันทึกข้อมูล...';
+            setSaveBtnState(btn, 'loading', 'กำลังบันทึกข้อมูล...', true);
             // --------------------------------------------------------------------
 
             const payload = {
@@ -2360,14 +2681,23 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 qrsList: qrData,
             };
             await enqueue('saveAll', payload);
-            btn.classList.remove('saving'); btn.classList.add('success'); btn.textContent = '✓ บันทึกสำเร็จ';
-            showToast('บันทึกขึ้น Sheet เรียบร้อย ✓');
-            setTimeout(() => { btn.disabled = false; btn.classList.remove('success'); btn.textContent = '💾 บันทึกทั้งหมด'; closeAdmin(); }, 1500);
+            btn.classList.remove('saving'); btn.classList.add('success');
+            setSaveBtnState(btn, 'check', 'บันทึกสำเร็จ');
+            showToast('บันทึกขึ้น Sheet เรียบร้อย');
+            setTimeout(() => {
+                btn.disabled = false; btn.classList.remove('success');
+                setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
+                closeAdmin();
+            }, 1500);
         } catch (err) {
             console.warn('[saveAdmin]', err);
-            btn.classList.remove('saving'); btn.classList.add('error'); btn.textContent = '✗ บันทึกไม่สำเร็จ';
+            btn.classList.remove('saving'); btn.classList.add('error');
+            setSaveBtnState(btn, 'close', 'บันทึกไม่สำเร็จ');
             showToast('บันทึกไม่สำเร็จ — ดู console');
-            setTimeout(() => { btn.disabled = false; btn.classList.remove('error'); btn.textContent = '💾 บันทึกทั้งหมด'; }, 2000);
+            setTimeout(() => {
+                btn.disabled = false; btn.classList.remove('error');
+                setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
+            }, 2000);
         }
     }
 
@@ -2411,7 +2741,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             promoImgData = promoImgs[0] || '';
             e.target.value = '';
             renderPromoAdminList();
-            if (files.length) showToast('เพิ่มรูปโปรแล้ว ' + files.length + ' รูป ✓');
+            if (files.length) showToast('เพิ่มรูปโปรแล้ว ' + files.length + ' รูป');
         });
 
         // splash logo upload (แยกจาก navbar logo)
@@ -2422,7 +2752,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const splashImg = $('splashLogo'); if (splashImg) splashImg.src = splashLogoData;
             const spa = $('splashLogoPreviewAdmin'); if (spa) { spa.src = splashLogoData; spa.style.display = ''; }
             const spn = $('splashLogoNoAdmin'); if (spn) spn.style.display = 'none';
-            showToast('เปลี่ยนโลโก้ splash แล้ว ✓');
+            showToast('เปลี่ยนโลโก้ splash แล้ว');
         });
 
         bindSliders();
@@ -2456,10 +2786,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const updateArrow = () => {
             const top = modal.scrollTop;
             const max = modal.scrollHeight - modal.clientHeight;
-            // ถ้าใกล้สุดล่าง (เผื่อ 20px) → แสดงลูกศรขึ้น (จะกลับไปบน)
+            // ถ้าใกล้สุดล่าง (เผื่อ 20px) → ลูกศรขึ้น (จะกลับไปบน)
             // อื่น ๆ → ลูกศรลง (ไปล่างสุด)
+            // ไม่ใช้ textContent เพราะ DOM มี 2 <svg> ภายใน — สลับด้วย data-dir + CSS แทน
             const nearBottom = max > 0 && (max - top) <= 20;
-            btn.textContent = nearBottom ? '⬆' : '⬇';
             btn.dataset.dir = nearBottom ? 'up' : 'down';
         };
 
@@ -2479,9 +2809,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     function saveTemplateDraft() {
-        const btn = $('saveTemplateDraftBtn'); btn.classList.add('saved'); btn.textContent = '✓ บันทึกไว้แล้ว';
+        const btn = $('saveTemplateDraftBtn'); btn.classList.add('saved'); btn.innerHTML = iconHTML('check') + ' บันทึกไว้แล้ว';
         showToast('บันทึก Template ชั่วคราวแล้ว — กด "บันทึกทั้งหมด" เพื่อ sync');
-        setTimeout(() => { btn.classList.remove('saved'); btn.textContent = '✓ บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)'; }, 1800);
+        setTimeout(() => { btn.classList.remove('saved'); btn.innerHTML = iconHTML('check') + ' บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)'; }, 1800);
     }
 
     function handleDelegatedClick(e) {
