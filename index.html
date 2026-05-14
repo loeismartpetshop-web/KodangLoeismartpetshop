@@ -443,7 +443,7 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 /* =====================================================
    SVG ICON UTILITIES
    ===================================================== */
-.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.16em; fill: none; stroke: currentColor; flex-shrink: 0; }
+.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.16em; fill: none; stroke: currentColor; flex-shrink: 0; pointer-events: none; }
 .ic-fill { fill: currentColor; stroke: none; }
 .ic-lg { width: 1.25em; height: 1.25em; }
 .ic-xl { width: 1.5em; height: 1.5em; }
@@ -1755,45 +1755,75 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         });
 
         // ปุ่ม "ใช้ตำแหน่งปัจจุบันของฉัน"
-        $('currentLocationBtn').addEventListener('click', () => {
+        // ใช้ .onclick (assign ตรง) เหมือนเวอร์ชันเดิม — เพื่อหลีกเลี่ยงปัญหาที่ addEventListener อาจ bind ซ้ำ
+        // เมื่อ initMap() ถูกเรียกซ้ำตอนเปิด checkout drawer หลายๆ รอบ
+        $('currentLocationBtn').onclick = () => {
+            const btn = $('currentLocationBtn');
             if (!navigator.geolocation) {
                 showToast('เบราว์เซอร์ไม่รองรับการระบุตำแหน่ง');
                 return;
             }
-            navigator.geolocation.getCurrentPosition(pos => {
-                const lat = pos.coords.latitude, lon = pos.coords.longitude;
-                map.location({ lon: lon, lat: lat }, true);
-                map.zoom(16, true);
-                marker.move({ lon: lon, lat: lat });
-                scheduleReverseGeocode(lat, lon);
-            }, err => {
-                showToast('ไม่สามารถระบุตำแหน่งได้: ' + (err.message || 'unknown'));
-            }, { enableHighAccuracy: true, timeout: 10000 });
-        });
+            // แสดง feedback ทันทีให้รู้ว่ากำลังขอ permission / รอ GPS
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = iconHTML('loading', 'ic-lg ic-spin') + ' กำลังหาตำแหน่ง...';
+            btn.disabled = true;
 
-        // ปุ่ม "ยืนยันตำแหน่งหมุด" → เติมที่อยู่ลง textarea + ต่อท้ายด้วยพิกัด
-        $('confirmPinBtn').addEventListener('click', () => {
+            const restore = () => { btn.innerHTML = originalHTML; btn.disabled = false; };
+
+            try {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                        try {
+                            map.location({ lon: lon, lat: lat }, true);
+                            map.zoom(16, true);
+                            marker.move({ lon: lon, lat: lat });
+                            scheduleReverseGeocode(lat, lon);
+                            showToast('ระบุตำแหน่งสำเร็จ');
+                        } catch (e) {
+                            console.error('[currentLocation] map update failed:', e);
+                            showToast('แสดงตำแหน่งไม่สำเร็จ — ลองอีกครั้ง');
+                        }
+                        restore();
+                    },
+                    err => {
+                        console.warn('[geolocation error]', err.code, err.message);
+                        let msg = 'ไม่สามารถระบุตำแหน่งได้';
+                        if (err.code === 1) msg = 'กรุณาอนุญาตให้เข้าถึงตำแหน่งในเบราว์เซอร์';
+                        else if (err.code === 2) msg = 'หา GPS ไม่เจอ — ลองออกที่โล่งแล้วลองใหม่';
+                        else if (err.code === 3) msg = 'หา GPS นานเกินไป — ลองอีกครั้ง';
+                        showToast(msg);
+                        restore();
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            } catch (e) {
+                console.error('[geolocation throw]', e);
+                showToast('Geolocation ใช้งานไม่ได้ — เปิดผ่าน HTTPS เท่านั้น');
+                restore();
+            }
+        };
+
+        // ปุ่ม "ยืนยันตำแหน่งหมุด" → เติมที่อยู่จาก reverse geocoding ลง textarea ทันที + user แก้ได้
+        $('confirmPinBtn').onclick = () => {
             const loc = marker.location();
             if (!loc) { showToast('ไม่พบตำแหน่งหมุด'); return; }
             const lat = loc.lat, lon = loc.lon;
             const addr = $('coAddress');
-            const pinText = ` [พิกัดหมุด: ${lat.toFixed(5)}, ${lon.toFixed(5)}]`;
+            const pinText = `[พิกัดหมุด: ${lat.toFixed(5)}, ${lon.toFixed(5)}]`;
 
-            // ดึงข้อความเดิม (ตัดพิกัดเก่าทิ้งก่อน) เพื่อไม่ให้ซ้อน
-            let baseText = (addr.value || '').replace(/\s*\[พิกัดหมุด:.*?\]/, '').trim();
-
-            // ถ้ายังไม่มีข้อความเดิม + มีที่อยู่จาก reverse geocode → เติมให้
-            if (!baseText && lastReverseAddress) {
-                baseText = lastReverseAddress;
+            // เติมที่อยู่ทันที — รูปแบบ: <ที่อยู่จาก geocoding> [พิกัดหมุด: lat, lon]
+            // user สามารถแก้ไข/เพิ่มบ้านเลขที่ในช่อง textarea ได้ปกติ
+            if (lastReverseAddress) {
+                addr.value = lastReverseAddress + ' ' + pinText;
+            } else {
+                // ถ้ายังไม่มี geocode (เช่น API ช้า/error) → ใส่แค่พิกัด
+                addr.value = (addr.value || '').replace(/\s*\[พิกัดหมุด:.*?\]/, '').trim();
+                addr.value = (addr.value ? addr.value + ' ' : '') + pinText;
             }
-            // ถ้ามีข้อความเดิมอยู่แล้ว แต่ไม่มีที่อยู่จาก geocode ในนั้น → เติมต่อท้าย (ก่อนพิกัด)
-            else if (lastReverseAddress && !baseText.includes(lastReverseAddress)) {
-                baseText = baseText ? (baseText + ' ' + lastReverseAddress) : lastReverseAddress;
-            }
-
-            addr.value = baseText + pinText;
-            showToast('ปักหมุดสำเร็จ');
-        });
+            addr.classList.remove('invalid');
+            showToast('ปักหมุดสำเร็จ — แก้ไขที่อยู่ได้ตามต้องการ');
+        };
     }
 
     /* ---- render bank list in checkout (selectable + copy) ---- */
