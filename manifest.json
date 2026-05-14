@@ -1,0 +1,38 @@
+{
+  "name": "SmartPetShop",
+  "short_name": "SmartPetShop",
+  "description": "Loei Smart Pet Shop - แคตตาล็อกสินค้าออนไลน์",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#2563EB",
+  "background_color": "#f0f2f5",
+  "lang": "th",
+  "icons": [
+    {
+      "src": "LOGO.PNG",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "LOGO.PNG",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "LOGO.PNG",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "LOGO.PNG",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
