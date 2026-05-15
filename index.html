@@ -1092,7 +1092,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const SEARCH_DEBOUNCE_MS = 200;
 
     // ⚠️ ใส่ URL ของ GAS Web App ที่ Deploy แล้วตรงนี้
-    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzNhrazgF5_kgKtz_N5KrUjLHty2D8qjhvAhKplihB0rvEDHcOAwRp9bA5lJJutCWcH/exec';
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxklTKDorSN2C64ANRfyzjkcNFGeKThelnalWMT-fepQ5gvCmtV4kkVOOktDVcphPHM/exec';
 
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
@@ -1182,7 +1182,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                     const idx = queue.indexOf(item);
                     if (idx > -1) queue.splice(idx, 1);
                     if (item.resolve) item.resolve(data);
-                } else { throw new Error(data.error || 'GAS error'); }
+                } else {
+                    // [non-retryable error] เช่น stock ไม่พอ — reject ทันที ไม่ retry
+                    // เพราะ retry ก็จะได้ผลลัพธ์เดิม
+                    if (data.insufficientItems || data.nonRetryable) {
+                        item.status = 'FAILED';
+                        const idx = queue.indexOf(item);
+                        if (idx > -1) queue.splice(idx, 1);
+                        const err = new Error(data.error || 'GAS error');
+                        err.data = data; // แนบ data กลับไปให้ caller ใช้
+                        if (item.reject) item.reject(err);
+                        continue; // ข้ามไป item ถัดไป ไม่เข้า catch
+                    }
+                    throw new Error(data.error || 'GAS error');
+                }
             } catch (err) {
                 if (item.attempts >= 3) {
                     item.status = 'FAILED';
@@ -2083,14 +2096,19 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const found = p.sizes.find(s => s.label === defLabel);
         const defPrice = found ? found.price : (p.sizes[0] ? p.sizes[0].price : 0);
 
+        // [stock visual] แสดง stock ที่ยัง "พร้อมขาย" (หักของในตะกร้าออกแล้ว) — ตัว p.stock จริงยังไม่ลด
+        const availStock = getAvailableStock(p.id);
         const stockHtml = p.inStock
-            ? '<div class="card-stock"><span class="stock-dot"></span><span class="stock-label">มีสินค้า</span>' +
-              (p.stock > 0 ? `<span class="stock-qty${p.stock <= 5 ? ' low' : ''}">เหลือ ${p.stock} ชิ้น</span>` : '') + '</div>'
+            ? (availStock > 0
+                ? '<div class="card-stock"><span class="stock-dot"></span><span class="stock-label">มีสินค้า</span>' +
+                  (typeof p.stock === 'number' && p.stock > 0 ? `<span class="stock-qty${availStock <= 5 ? ' low' : ''}">เหลือ ${availStock} ชิ้น</span>` : '') + '</div>'
+                : '<div class="card-stock"><span class="stock-dot out"></span><span class="stock-label out">อยู่ในตะกร้าครบแล้ว</span></div>')
             : '<div class="card-stock"><span class="stock-dot out"></span><span class="stock-label out">สินค้าหมด</span></div>';
 
         const sizeHtml = p.sizes.map(s => `<button class="size-btn${s.label === defLabel ? ' selected' : ''}" data-action="selectSize" data-pid="${esc(p.id)}" data-size="${esc(s.label)}">${esc(s.label)}</button>`).join('');
 
-        const dis = p.inStock ? '' : ' disabled';
+        // [stock visual] disable ปุ่มเมื่อสินค้าหมดจริง หรือ ของในตะกร้าครบ stock แล้ว
+        const dis = (p.inStock && availStock > 0) ? '' : ' disabled';
         const btnBg = useGradient ? `background:linear-gradient(${gradientDeg}deg, ${currentTheme}, ${shiftColor(currentTheme,60)})` : `background:${currentTheme}`;
 
         const imgHtml = p.image ? `<img class="card-img" src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : `<div class="card-img-placeholder">${iconHTML('package','ic-3x')}</div>`;
@@ -2123,12 +2141,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function changeQty(pid, delta) {
         const p = products.find(x => x.id === pid);
-        const maxStock = (p && typeof p.stock === 'number' && p.stock > 0) ? p.stock : Infinity;
+        // [stock visual] cap ตาม available stock (หักที่อยู่ในตะกร้าแล้ว) ไม่ใช่ p.stock ดิบ
+        const maxStock = (p && typeof p.stock === 'number' && p.stock > 0) ? getAvailableStock(pid) : Infinity;
         const next = Math.max(1, (quantities[pid] || 1) + delta);
         // [แก้ข้อ 2] กันกดเกิน stock — ถ้าเกินให้แสดง toast เตือนและคงค่าเดิม (cap)
         if (next > maxStock) {
             showToast(`เหลือสินค้าเพียง ${maxStock} ชิ้น`);
-            quantities[pid] = maxStock;
+            quantities[pid] = Math.max(1, maxStock);
         } else {
             quantities[pid] = next;
         }
@@ -2136,6 +2155,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function getSize(pid) { const p = products.find(x => x.id === pid); return selectedSizes[pid] || (p && p.sizes[0] ? p.sizes[0].label : ''); }
     function getQty(pid) { return quantities[pid] || 1; }
+    // [stock visual] รวม qty ของ pid เดียวกันในตะกร้าทุก size — visual only, ไม่กระทบ p.stock จริง
+    function getReservedQty(pid) { return cart.reduce((s, i) => i.pid === pid ? s + i.qty : s, 0); }
+    // [stock visual] stock ที่เหลือสำหรับใส่ตะกร้าได้ = stock จริง - ที่จองไว้ในตะกร้า
+    function getAvailableStock(pid) {
+        const p = products.find(x => x.id === pid);
+        if (!p || typeof p.stock !== 'number') return Infinity;
+        return Math.max(0, p.stock - getReservedQty(pid));
+    }
 
     /* ============================================================
        CART
@@ -2154,6 +2181,12 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (addQty < qty) showToast(`เพิ่มได้อีก ${addQty} ชิ้น (เหลือ ${maxStock} ชิ้น)`);
         if (ex) ex.qty += addQty; else cart.push({ pid, name: p.name, size, qty: addQty, price });
         updateCartBadge(); if (addQty === qty) showToast('เพิ่มลงตะกร้าแล้ว');
+        // [reset qty] รีเซ็ตจำนวนบนการ์ดเป็น 1 + อัพเดต UI ทั้งบนการ์ดและใน popup
+        quantities[pid] = 1;
+        const qEl = $('qty-' + pid); if (qEl) qEl.textContent = 1;
+        const pqEl = $('popupQty-' + pid); if (pqEl) pqEl.textContent = 1;
+        // [stock visual] re-render การ์ดเพื่อให้ "เหลือ X ชิ้น" และสถานะปุ่มอัพเดตทันที
+        renderCatalog();
     }
     function orderNow(pid) { addToCart(pid); openCart(); }
     function updateCartBadge() { $('cartBadge').textContent = cart.reduce((s, i) => s + i.qty, 0); }
@@ -2288,24 +2321,83 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             stockChanges, // ★ ส่ง stock decrement ให้ GAS ลดสต็อกในชีต
         };
 
-        if (isGasConfigured()) {
-            try { await enqueue('submitOrder', payload); showToast('ส่งคำสั่งซื้อสำเร็จ'); } 
-            catch (err) { console.warn('[submitOrder]', err); showToast('ส่งไม่สำเร็จ — จะ retry อัตโนมัติ'); }
-        } else { console.log('[ORDER]', payload); showToast('ส่งคำสั่งซื้อแล้ว (โหมดทดลอง)'); }
+        // [stock validation] handle 3 cases: success / stock-not-enough / network-error
+        let outcome = 'mock'; // success | stock_error | network_error | mock
+        let insufficientItems = null;
 
-        // ลดสต็อกฝั่ง client + อัพเดท UI ทันที (ไม่ต้องรอ GAS)
+        if (isGasConfigured()) {
+            try {
+                await enqueue('submitOrder', payload);
+                outcome = 'success';
+                showToast('ส่งคำสั่งซื้อสำเร็จ');
+            } catch (err) {
+                console.warn('[submitOrder]', err);
+                // ถ้า GAS ตอบ stock ไม่พอ → err.data.insufficientItems จะมี
+                if (err && err.data && err.data.insufficientItems) {
+                    outcome = 'stock_error';
+                    insufficientItems = err.data.insufficientItems;
+                } else {
+                    outcome = 'network_error';
+                    showToast('ส่งไม่สำเร็จ — จะ retry อัตโนมัติ');
+                }
+            }
+        } else {
+            console.log('[ORDER]', payload);
+            showToast('ส่งคำสั่งซื้อแล้ว (โหมดทดลอง)');
+            outcome = 'success';
+        }
+
+        btn.disabled = false; btn.textContent = 'ส่งคำสั่งซื้อ';
+
+        // === Stock error: sync p.stock จาก response, ไม่ล้าง cart, แสดง dialog ===
+        if (outcome === 'stock_error') {
+            // อัพเดต p.stock ตามที่ GAS รายงาน (เพราะเลขในเว็บเก่าแล้ว)
+            insufficientItems.forEach(it => {
+                const p = products.find(x => x.id === it.pid);
+                if (p) {
+                    p.stock = it.available;
+                    if (it.available <= 0) p.inStock = false;
+                }
+            });
+            renderCatalog(); // อัพเดต "เหลือ X" บนการ์ด
+            renderCartItems(); // อัพเดตในตะกร้าด้วย
+            showStockErrorDialog(insufficientItems);
+            return; // ไม่ล้าง cart ให้ผู้ใช้ลบเอง
+        }
+
+        // === Success / network error: optimistic update เหมือนเดิม ===
+        // [fix] ลำดับสำคัญ: ล้าง cart ก่อน แล้วค่อยลด p.stock + render
+        cart = cart.filter(i => i.checked === false);
+        updateCartBadge();
         Object.keys(stockChanges).forEach(pid => {
             const p = products.find(x => x.id === pid);
             if (p && typeof p.stock === 'number') {
                 p.stock = Math.max(0, p.stock - stockChanges[pid]);
-                if (p.stock === 0) p.inStock = false; // หมดสต็อก → mark out
+                if (p.stock === 0) p.inStock = false;
             }
         });
-        renderCatalog(); // re-render การ์ดเพื่อให้เห็นจำนวนใหม่
+        renderCatalog();
+        closeCart();
+    }
 
-        cart = cart.filter(i => i.checked === false);
-        updateCartBadge(); closeCart();
-        btn.disabled = false; btn.textContent = 'ส่งคำสั่งซื้อ';
+    // แสดง dialog บอกผู้ใช้ว่าสินค้าตัวไหน stock ไม่พอ
+    function showStockErrorDialog(items) {
+        const lines = items.map(it => {
+            if (it.reason === 'not_found') return `• ${esc(it.name)} — สินค้าถูกลบออกจากระบบ`;
+            return `• ${esc(it.name)} — สั่ง ${it.requested} ชิ้น แต่เหลือ ${it.available} ชิ้น`;
+        }).join('<br>');
+        const msg = `<div style="text-align:left;">สั่งซื้อไม่สำเร็จ — สต็อกไม่เพียงพอ:<br><br>${lines}<br><br>กรุณาปรับจำนวนในตะกร้าแล้วลองใหม่</div>`;
+        // ใช้ toast แบบ persist ที่มีอยู่ ถ้าไม่มี modal — fallback alert
+        if (typeof showToast === 'function') {
+            showToast('สต็อกไม่พอ — กรุณาปรับจำนวนในตะกร้า', 4000);
+        }
+        // แสดงแบบ alert เพื่อให้ผู้ใช้เห็นชัด (รายการสินค้าที่มีปัญหา)
+        setTimeout(() => {
+            alert(items.map(it => {
+                if (it.reason === 'not_found') return `${it.name} — สินค้าถูกลบ`;
+                return `${it.name}\nสั่ง ${it.requested} ชิ้น แต่เหลือ ${it.available} ชิ้น`;
+            }).join('\n\n') + '\n\nกรุณาปรับจำนวนในตะกร้าแล้วลองใหม่');
+        }, 100);
     }
     function resetCheckoutState() {
         ['coName','coPhone','coAddress','pickupContact'].forEach(id => { const el = $(id); if (el) { el.value = ''; el.classList.remove('invalid'); } });
