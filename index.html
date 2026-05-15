@@ -518,6 +518,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 .admin-stock-qty-wrap label { font-size: 11px; color: #6b7280; font-weight: 600; white-space: nowrap; }
 .admin-stock-qty-input { width: 64px; padding: 4px 8px; border: 1.5px solid #e5e7eb; border-radius: 6px; font-size: 13px; outline: none; font-family: inherit; text-align: center; }
 .admin-stock-qty-input:focus { border-color: #6b7280; }
+.admin-stock-step-btn { width: 26px; height: 26px; background: #fff; border: 1.5px solid #e5e7eb; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; color: #374151; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; }
+.admin-stock-step-btn:hover { background: #f3f4f6; border-color: #6b7280; }
+.admin-stock-step-btn:active { background: #e5e7eb; }
 .promo-imgs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
 .promo-img-thumb { position: relative; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #f3f4f6; }
 .promo-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -715,7 +718,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                             </div>
                             <div style="text-align:center; background:#fff; padding:16px; border-radius:10px; border:1px solid #e5e7eb;">
                                 <div id="qrBankNameDisplay" style="font-weight:bold; font-size:13px; color:#374151; margin-bottom:10px;"></div>
-                                <img id="qrImg" src="" alt="QR Code" style="max-width:200px; width:100%; display:none;">
+                                <img id="qrImg" src="" alt="QR Code" style="max-width:200px; width:100%; display:none; margin:0 auto;">
                                 <div id="qrFallback" style="display:none; flex-direction:column; align-items:center; gap:8px; padding:20px; color:#9ca3af;">
                                     <svg class="ic ic-3x"><use href="#ic-camera"/></svg>
                                     <div style="font-size:13px;">ยังไม่มีรูป QR Code</div>
@@ -1089,7 +1092,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const SEARCH_DEBOUNCE_MS = 200;
 
     // ⚠️ ใส่ URL ของ GAS Web App ที่ Deploy แล้วตรงนี้
-    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxIxFPzQZAgN9qkGtyoLMeP1o5VqDE9fbxgK-dfpNWoef25GZspXw2fhI81V27LhTbD/exec';
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzNhrazgF5_kgKtz_N5KrUjLHty2D8qjhvAhKplihB0rvEDHcOAwRp9bA5lJJutCWcH/exec';
 
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
@@ -2106,7 +2109,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 '</div></div>' +
                 '<div class="card-actions">' +
                     `<button class="btn-order"${dis} style="${btnBg}" data-action="orderNow" data-pid="${esc(p.id)}">สั่งซื้อ</button>` +
-                    `<button class="btn-cart"${dis} data-action="addToCart" data-pid="${esc(p.id)}">${iconHTML('plus')} ใส่ตะกร้า</button>` +
+                    `<button class="btn-cart"${dis} data-action="addToCart" data-pid="${esc(p.id)}">${iconHTML('cart')} ใส่ตะกร้า</button>` +
                 '</div>' +
             '</div>';
         return card;
@@ -2142,8 +2145,15 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const size = getSize(pid), qty = getQty(pid);
         const s = p.sizes.find(x => x.label === size); const price = s ? s.price : 0;
         const ex = cart.find(i => i.pid === pid && i.size === size);
-        if (ex) ex.qty += qty; else cart.push({ pid, name: p.name, size, qty, price });
-        updateCartBadge(); showToast('เพิ่มลงตะกร้าแล้ว');
+        // [stock cap] กันใส่เกิน stock — รวม qty เดิมในตะกร้า (ทุก size ของ pid นี้) + qty ใหม่
+        const maxStock = (typeof p.stock === 'number' && p.stock > 0) ? p.stock : Infinity;
+        const currentInCart = cart.filter(i => i.pid === pid).reduce((s, i) => s + i.qty, 0);
+        const remaining = maxStock - currentInCart;
+        if (remaining <= 0) { showToast(`สินค้านี้ในตะกร้าครบ ${maxStock} ชิ้นแล้ว`); return; }
+        const addQty = Math.min(qty, remaining);
+        if (addQty < qty) showToast(`เพิ่มได้อีก ${addQty} ชิ้น (เหลือ ${maxStock} ชิ้น)`);
+        if (ex) ex.qty += addQty; else cart.push({ pid, name: p.name, size, qty: addQty, price });
+        updateCartBadge(); if (addQty === qty) showToast('เพิ่มลงตะกร้าแล้ว');
     }
     function orderNow(pid) { addToCart(pid); openCart(); }
     function updateCartBadge() { $('cartBadge').textContent = cart.reduce((s, i) => s + i.qty, 0); }
@@ -2170,7 +2180,23 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function removeCartItem(idx) { cart.splice(idx, 1); updateCartBadge(); renderCartItems(); showToast('ยกเลิกรายการแล้ว'); }
     function toggleCartItem(idx) { if (!cart[idx]) return; cart[idx].checked = !cart[idx].checked; renderCartItems(); }
-    function cartQty(idx, delta) { if (!cart[idx]) return; cart[idx].qty = Math.max(1, cart[idx].qty + delta); updateCartBadge(); renderCartItems(); }
+    function cartQty(idx, delta) {
+        if (!cart[idx]) return;
+        const item = cart[idx];
+        const p = products.find(x => x.id === item.pid);
+        const maxStock = (p && typeof p.stock === 'number' && p.stock > 0) ? p.stock : Infinity;
+        // [stock cap] รวม qty ของ pid เดียวกันทุก size — กันสองช่องรวมกันเกิน stock
+        const otherInCart = cart.reduce((s, i, j) => (j !== idx && i.pid === item.pid) ? s + i.qty : s, 0);
+        const next = Math.max(1, item.qty + delta);
+        const allowedMax = maxStock - otherInCart;
+        if (next > allowedMax) {
+            showToast(`เหลือสินค้าเพียง ${allowedMax} ชิ้น`);
+            item.qty = allowedMax;
+        } else {
+            item.qty = next;
+        }
+        updateCartBadge(); renderCartItems();
+    }
 
     /* ============================================================
        CHECKOUT
@@ -2476,7 +2502,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             '<div class="admin-stock-row">' +
                 `<button class="admin-stock-btn ${p.inStock ? 'instock' : 'outstock'}" id="stockbtn-${esc(p.id)}" data-action="toggleStock" data-pid="${esc(p.id)}">${iconHTML(p.inStock ? 'check' : 'close')} ${p.inStock ? 'มีสินค้า' : 'สินค้าหมด'}</button>` +
                 '<div class="admin-stock-qty-wrap"><label>จำนวนคงเหลือ</label>' +
+                    `<button type="button" class="admin-stock-step-btn" data-action="adminStockStep" data-pid="${esc(p.id)}" data-delta="-1" aria-label="ลด">−</button>` +
                     `<input class="admin-stock-qty-input" type="number" min="0" value="${p.stock || 0}" placeholder="0" data-action="updateStock" data-pid="${esc(p.id)}">` +
+                    `<button type="button" class="admin-stock-step-btn" data-action="adminStockStep" data-pid="${esc(p.id)}" data-delta="1" aria-label="เพิ่ม">+</button>` +
                     '<span style="font-size:11px;color:#9ca3af;">ชิ้น</span>' +
                 '</div>' +
             '</div>';
@@ -2607,6 +2635,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     function updateStock(pid, val) { const p = products.find(x => x.id === pid); if (!p) return; p.stock = parseInt(val, 10) || 0; }
+    function adminStockStep(pid, delta) {
+        const p = products.find(x => x.id === pid); if (!p) return;
+        const cur = parseInt(p.stock, 10) || 0;
+        const next = Math.max(0, cur + delta);
+        p.stock = next;
+        const input = document.querySelector(`.admin-stock-qty-input[data-pid="${pid}"]`);
+        if (input) input.value = next;
+    }
 
     /* ============================================================
        SAVE ADMIN
@@ -2922,6 +2958,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             case 'removeSize':      removeSize(pid, parseInt(idx, 10)); break;
             case 'duplicateProduct': duplicateProduct(pid); break;
             case 'toggleStock':     toggleStock(pid); break;
+            case 'adminStockStep':  adminStockStep(pid, parseInt(delta, 10)); break;
             case 'setTemplate':     setTemplate(tpl); break;
             case 'addCategory':     addCategory(); break;
             case 'switchLayoutTab': switchLayoutTab(tab); break;
@@ -2962,6 +2999,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const { action, catId } = target.dataset;
         if (action === 'updateCatName') updateCatName(catId, target.value);
     }
+
+    /* [ข้อ 3] expose ให้ inline onclick ใน popup เรียกถึง (ปุ่ม ซื้อเลย / เพิ่ม ใน popup) */
+    window.addToCart = addToCart;
+    window.orderNow = orderNow;
 
     /* GO! */
     init();
