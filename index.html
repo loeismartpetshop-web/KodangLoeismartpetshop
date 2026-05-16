@@ -3023,7 +3023,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 '<rect x="3" y="11" width="18" height="11" rx="2"/>' +
                 '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
             '</svg>' +
-            '<span>หมวดนี้กำลังถูกแก้ไขโดย <strong>' + esc(lockInfo.lockedBy) + '</strong> — รอจนกว่าจะบันทึกเสร็จ หน้าจะรีเฟรชอัตโนมัติ</span>';
+            '<span>ห้องนี้กำลังถูกเช่าโดย <strong>' + esc(lockInfo.lockedBy) + '</strong> — รอจนกว่าจะเช็คเอาท์ ห้องนี้จะปล่อยเช่าต่ออัตโนมัติ</span>';
         listEl.insertBefore(banner, block);
         block.classList.add('admin-cat-readonly');
 
@@ -3035,7 +3035,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 '<rect x="3" y="11" width="18" height="11" rx="2"/>' +
                 '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
             '</svg>' +
-            '<div class="lock-msg">หมวดนี้กำลังถูกแก้ไขอยู่โดย <strong>' + esc(lockInfo.lockedBy) + '</strong></div>';
+            '<div class="lock-msg">ห้องนี้กำลังถูกเช่าโดย <strong>' + esc(lockInfo.lockedBy) + '</strong></div>';
         block.appendChild(overlay);
 
         // 3) sticky indicator ลอยล่างหลังบ้าน — เห็นชัดแม้ scroll ลงไกล
@@ -3046,7 +3046,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 '<rect x="3" y="11" width="18" height="11" rx="2"/>' +
                 '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
             '</svg>' +
-            '<span class="floating-text">หมวดนี้กำลังถูกแก้ไขโดย <strong>' + esc(lockInfo.lockedBy) + '</strong> — เข้าไปแก้ไขไม่ได้</span>';
+            '<span class="floating-text">ห้องนี้กำลังถูกเช่าโดย <strong>' + esc(lockInfo.lockedBy) + '</strong> — รอจนกว่าจะเช็คเอาท์</span>';
         listEl.appendChild(floating);
     }
 
