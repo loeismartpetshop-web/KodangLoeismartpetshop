@@ -521,6 +521,25 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 .admin-stock-step-btn { width: 26px; height: 26px; background: #fff; border: 1.5px solid #e5e7eb; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; color: #374151; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; }
 .admin-stock-step-btn:hover { background: #f3f4f6; border-color: #6b7280; }
 .admin-stock-step-btn:active { background: #e5e7eb; }
+/* === Admin Category Sidebar (split layout: tabs ซ้าย + content ขวา) === */
+.admin-cat-layout { display: flex; gap: 14px; align-items: flex-start; }
+.admin-cat-sidebar { flex: 0 0 180px; min-width: 0; position: sticky; top: 70px; align-self: flex-start; }
+.admin-cat-tabs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; max-height: 60vh; overflow-y: auto; padding-right: 2px; }
+.admin-cat-tab { padding: 10px 12px; background: #f9fafb; border: 1.5px solid #e5e7eb; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; color: #374151; font-family: inherit; text-align: left; transition: background 0.15s, border-color 0.15s, color 0.15s; display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; width: 100%; }
+.admin-cat-tab:hover { background: #f3f4f6; border-color: #9ca3af; }
+.admin-cat-tab.active { background: #1f2937; border-color: #1f2937; color: #fff; }
+.admin-cat-tab .cat-tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cat-tab .cat-tab-count { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
+.admin-cat-content { flex: 1; min-width: 0; }
+.admin-cat-empty { padding: 40px 20px; text-align: center; color: #9ca3af; font-size: 13px; border: 1px dashed #d1d5db; border-radius: 10px; }
+/* Mobile (จอแคบ) — เปลี่ยน sidebar เป็น horizontal tab strip ด้านบน */
+@media (max-width: 599px) {
+    .admin-cat-layout { flex-direction: column; gap: 10px; }
+    .admin-cat-sidebar { flex: 0 0 auto; width: 100%; position: static; }
+    .admin-cat-tabs { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .admin-cat-tab { flex: 0 0 auto; min-width: 130px; max-width: 220px; }
+}
+
 .promo-imgs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
 .promo-img-thumb { position: relative; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #f3f4f6; }
 .promo-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -916,8 +935,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
         <div class="admin-section">
             <div class="admin-section-title">จัดการสินค้า</div>
-            <div id="adminCategoryList"></div>
-            <button class="admin-add-cat-btn" data-action="addCategory"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่มหมวดหมู่หลัก</button>
+            <div class="admin-cat-layout">
+                <aside class="admin-cat-sidebar">
+                    <div class="admin-cat-tabs" id="adminCatTabs"></div>
+                    <button class="admin-add-cat-btn" data-action="addCategory"><svg class="ic"><use href="#ic-plus"/></svg> เพิ่มหมวดหมู่หลัก</button>
+                </aside>
+                <div class="admin-cat-content" id="adminCategoryList"></div>
+            </div>
         </div>
 
         <div class="save-btn-wrap">
@@ -1251,6 +1275,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let useGradient = false;
     let gradientDeg = 135;
     let currentTemplate = 'double';
+    let activeAdminCatId = null; // หมวดที่ admin กำลังเปิดดู/แก้ไข (ใช้ใน sidebar layout)
     let logoDataUrl = ''; // โลโก้ navbar
     let splashLogoData = ''; // ★ โลโก้ splash screen (แยกจาก navbar)
     const customerId = 'CUS-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -2525,39 +2550,92 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
     /* ============================================================
        ADMIN CATEGORIES & PRODUCTS
-       ============================================================ */
+       ============================================================
+       Layout ใหม่: sidebar ซ้าย (รายชื่อหมวด) + content ขวา (สินค้าของหมวดที่เลือก)
+       - renderAdminCategories()    : entry — render ทั้ง sidebar + content
+       - renderAdminCatTabs()       : sidebar tabs (รายชื่อหมวด + count + ปุ่มเพิ่มหมวด)
+       - renderAdminCatContent()    : เนื้อหาฝั่งขวา = สินค้าของ activeAdminCatId
+       - selectAdminCat(catId)      : เปลี่ยนหมวดที่ดูอยู่ — re-render content + อัพเดท active tab
+    */
     function renderAdminCategories() {
-        const el = $('adminCategoryList'); el.innerHTML = '';
+        // ตั้ง active default: หมวดแรก ถ้า activeAdminCatId ปัจจุบันไม่อยู่ใน list แล้ว
+        if (!categories.some(c => c.id === activeAdminCatId)) {
+            activeAdminCatId = categories.length ? categories[0].id : null;
+        }
+        renderAdminCatTabs();
+        renderAdminCatContent();
+    }
+
+    function renderAdminCatTabs() {
+        const tabs = $('adminCatTabs'); if (!tabs) return;
+        tabs.innerHTML = '';
         categories.forEach(cat => {
-            const catProds = products.filter(p => p.catId === cat.id);
-            const block = document.createElement('div');
-            block.className = 'admin-cat-block'; block.id = 'admin-block-' + cat.id;
-            block.innerHTML =
-                `<div class="admin-cat-header" data-action="toggleAdminCat" data-cat-id="${esc(cat.id)}">` +
-                    `<span><span id="catname-${esc(cat.id)}">${esc(cat.name)}</span> <span style="font-size:12px;color:#d1d5db;font-weight:normal;" id="cnt-${esc(cat.id)}">(${catProds.length} สินค้า)</span></span>` +
-                    `<div><button class="btn-delete-cat" data-action="deleteCategory" data-cat-id="${esc(cat.id)}">ลบ</button><span class="admin-cat-arrow open" id="arrow-${esc(cat.id)}">▼</span></div>` +
-                '</div>' +
-                `<div class="admin-cat-body open" id="admin-cat-${esc(cat.id)}">` +
-                    '<div class="admin-field-row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">' +
-                        '<span class="admin-field-label">ชื่อหมวดหมู่</span>' +
-                        `<input class="admin-input" type="text" value="${esc(cat.name)}" data-action="updateCatName" data-cat-id="${esc(cat.id)}">` +
-                    '</div>' +
-                    `<div id="admin-prods-${esc(cat.id)}"></div>` +
-                    `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(cat.id)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
-                '</div>';
-            el.appendChild(block);
-            const prodsEl = $('admin-prods-' + cat.id);
-            catProds.forEach(p => prodsEl.appendChild(buildAdminCard(p)));
+            const count = products.filter(p => p.catId === cat.id).length;
+            const tab = document.createElement('button');
+            tab.type = 'button';
+            tab.className = 'admin-cat-tab' + (cat.id === activeAdminCatId ? ' active' : '');
+            tab.id = 'admin-cat-tab-' + cat.id;
+            tab.dataset.action = 'selectAdminCat';
+            tab.dataset.catId = cat.id;
+            tab.innerHTML =
+                `<span class="cat-tab-name" id="catname-tab-${esc(cat.id)}">${esc(cat.name)}</span>` +
+                `<span class="cat-tab-count" id="cnt-tab-${esc(cat.id)}">${count}</span>`;
+            tabs.appendChild(tab);
         });
     }
 
-    function toggleAdminCat(catId) { $('admin-cat-' + catId).classList.toggle('open'); $('arrow-' + catId).classList.toggle('open'); }
+    function renderAdminCatContent() {
+        const el = $('adminCategoryList'); if (!el) return;
+        el.innerHTML = '';
+        if (!categories.length || !activeAdminCatId) {
+            el.innerHTML = '<div class="admin-cat-empty">ยังไม่มีหมวดหมู่ — กด "เพิ่มหมวดหมู่หลัก" เพื่อสร้างหมวดแรก</div>';
+            return;
+        }
+        const cat = categories.find(c => c.id === activeAdminCatId);
+        if (!cat) { el.innerHTML = '<div class="admin-cat-empty">เลือกหมวดหมู่ทางซ้ายเพื่อแก้ไข</div>'; return; }
+        const catProds = products.filter(p => p.catId === cat.id);
+        const block = document.createElement('div');
+        block.className = 'admin-cat-block'; block.id = 'admin-block-' + cat.id;
+        block.innerHTML =
+            `<div class="admin-cat-header">` +
+                `<span><span id="catname-${esc(cat.id)}">${esc(cat.name)}</span> <span style="font-size:12px;color:#d1d5db;font-weight:normal;" id="cnt-${esc(cat.id)}">(${catProds.length} สินค้า)</span></span>` +
+                `<div><button class="btn-delete-cat" data-action="deleteCategory" data-cat-id="${esc(cat.id)}">ลบ</button></div>` +
+            '</div>' +
+            `<div class="admin-cat-body open" id="admin-cat-${esc(cat.id)}">` +
+                '<div class="admin-field-row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">' +
+                    '<span class="admin-field-label">ชื่อหมวดหมู่</span>' +
+                    `<input class="admin-input" type="text" value="${esc(cat.name)}" data-action="updateCatName" data-cat-id="${esc(cat.id)}">` +
+                '</div>' +
+                `<div id="admin-prods-${esc(cat.id)}"></div>` +
+                `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(cat.id)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
+            '</div>';
+        el.appendChild(block);
+        const prodsEl = $('admin-prods-' + cat.id);
+        catProds.forEach(p => prodsEl.appendChild(buildAdminCard(p)));
+    }
+
+    function selectAdminCat(catId) {
+        if (!categories.some(c => c.id === catId)) return;
+        activeAdminCatId = catId;
+        // update active state ใน sidebar tabs โดยไม่ต้อง re-render ทั้งหมด
+        document.querySelectorAll('.admin-cat-tab').forEach(t => t.classList.toggle('active', t.dataset.catId === catId));
+        renderAdminCatContent();
+        // scroll content เข้ามาในมุมมอง (สำหรับ mobile ที่ tab strip อยู่ด้านบน)
+        const content = $('adminCategoryList'); if (content) content.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function toggleAdminCat(catId) { $('admin-cat-' + catId).classList.toggle('open'); const a = $('arrow-' + catId); if (a) a.classList.toggle('open'); }
 
     function deleteCategory(catId) {
         if(!confirm('ยืนยันการลบหมวดหมู่นี้ พร้อมสินค้าข้างในทั้งหมด?')) return;
+        const idx = categories.findIndex(c => c.id === catId);
         categories = categories.filter(c => c.id !== catId);
         products = products.filter(p => p.catId !== catId);
-        const block = $('admin-block-' + catId); if (block) block.remove();
+        // ถ้าลบหมวดที่กำลังดูอยู่ → เลือกหมวดถัดไป (หรือก่อนหน้าถ้าเป็นตัวสุดท้าย)
+        if (activeAdminCatId === catId) {
+            activeAdminCatId = categories[idx] ? categories[idx].id : (categories[idx - 1] ? categories[idx - 1].id : (categories[0] ? categories[0].id : null));
+        }
+        renderAdminCategories();
         renderNav(); showToast('ลบหมวดหมู่แล้ว');
     }
 
@@ -2699,29 +2777,28 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const card = $('admin-prod-' + pid); if (card) card.remove();
         if (catId) updateCatCount(catId); showToast('ลบสินค้าแล้ว');
     }
-    function updateCatCount(catId) { const el = $('cnt-' + catId); if (!el) return; el.textContent = '(' + products.filter(p => p.catId === catId).length + ' สินค้า)'; }
-    function updateCatName(catId, name) { const cat = categories.find(c => c.id === catId); if (cat) cat.name = name; const span = $('catname-' + catId); if (span) span.textContent = name; }
+    function updateCatCount(catId) {
+        const cnt = products.filter(p => p.catId === catId).length;
+        const el = $('cnt-' + catId); if (el) el.textContent = '(' + cnt + ' สินค้า)';
+        // อัพเดทตัวเลขใน sidebar tab ด้วย
+        const tabCnt = $('cnt-tab-' + catId); if (tabCnt) tabCnt.textContent = cnt;
+    }
+    function updateCatName(catId, name) {
+        const cat = categories.find(c => c.id === catId); if (cat) cat.name = name;
+        const span = $('catname-' + catId); if (span) span.textContent = name;
+        // อัพเดทชื่อใน sidebar tab ด้วย
+        const tabName = $('catname-tab-' + catId); if (tabName) tabName.textContent = name;
+    }
 
     function addCategory() {
         const newId = 'cat-' + Date.now(); const newCat = { id: newId, name: 'หมวดหมู่ใหม่' };
         categories.push(newCat);
-        const el = $('adminCategoryList'); const block = document.createElement('div');
-        block.className = 'admin-cat-block'; block.id = 'admin-block-' + newId;
-        block.innerHTML =
-            `<div class="admin-cat-header" data-action="toggleAdminCat" data-cat-id="${esc(newId)}">` +
-                `<span><span id="catname-${esc(newId)}">${esc(newCat.name)}</span> <span style="font-size:12px;color:#d1d5db;font-weight:normal;" id="cnt-${esc(newId)}">(0 สินค้า)</span></span>` +
-                `<div><button class="btn-delete-cat" data-action="deleteCategory" data-cat-id="${esc(newId)}">ลบ</button><span class="admin-cat-arrow open" id="arrow-${esc(newId)}">▼</span></div>` +
-            '</div>' +
-            `<div class="admin-cat-body open" id="admin-cat-${esc(newId)}">` +
-                '<div class="admin-field-row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">' +
-                    '<span class="admin-field-label">ชื่อหมวดหมู่</span>' +
-                    `<input class="admin-input" type="text" value="${esc(newCat.name)}" data-action="updateCatName" data-cat-id="${esc(newId)}">` +
-                '</div>' +
-                `<div id="admin-prods-${esc(newId)}"></div>` +
-                `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(newId)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
-            '</div>';
-        el.appendChild(block); renderNav();
-        const nameInput = block.querySelector('input[data-action="updateCatName"]');
+        // auto-select หมวดที่เพิ่งสร้าง แล้ว re-render ทั้ง sidebar + content
+        activeAdminCatId = newId;
+        renderAdminCategories();
+        renderNav();
+        // focus ที่ input ชื่อหมวดในฝั่ง content เพื่อให้แก้ชื่อต่อทันที
+        const nameInput = document.querySelector(`#admin-block-${newId} input[data-action="updateCatName"]`);
         if (nameInput) { nameInput.focus(); nameInput.select(); }
         showToast('เพิ่มหมวดหมู่แล้ว');
     }
@@ -3043,6 +3120,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             case 'toggleCartItem':  toggleCartItem(parseInt(idx, 10)); break;
             case 'cartQty':         cartQty(parseInt(idx, 10), parseInt(delta, 10)); break;
             case 'toggleAdminCat':  toggleAdminCat(catId); break;
+            case 'selectAdminCat':  selectAdminCat(catId); break;
             case 'addProduct':      addProduct(catId); break;
             case 'deleteProduct':   deleteProduct(pid); break;
             case 'deleteCategory':  deleteCategory(catId); break;
