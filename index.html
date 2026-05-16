@@ -479,6 +479,17 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 .admin-force-lock-btn { border: none; background: #111827; color: #fff; border-radius: 8px; padding: 6px 9px; font-size: 11px; font-family: inherit; cursor: pointer; white-space: nowrap; }
 .admin-force-lock-btn:hover { background: #374151; }
 
+/* [Multi-Admin v2] category อยู่ในมือ admin คนอื่น — แสดง banner + ล็อก content */
+.admin-cat-locked-banner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 14px; background: #fef2f2; border: 1.5px solid #fecaca; border-radius: 12px; color: #b91c1c; font-size: 13px; line-height: 1.4; font-weight: 500; }
+.admin-cat-locked-banner .ic { width: 18px; height: 18px; stroke-width: 2.2; flex-shrink: 0; }
+.admin-cat-locked-banner strong { font-weight: 700; }
+.admin-cat-readonly { position: relative; opacity: 0.62; pointer-events: none; user-select: none; }
+.admin-cat-readonly::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.35); border-radius: 12px; z-index: 1; pointer-events: auto; cursor: not-allowed; }
+.admin-cat-readonly input, .admin-cat-readonly button, .admin-cat-readonly textarea, .admin-cat-readonly select { pointer-events: none; }
+.admin-cat-tab.locked-other { position: relative; }
+.admin-cat-tab.locked-other::before { content: '🔒'; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.85; }
+.admin-cat-tab.locked-other > * { padding-left: 14px; }
+
 /* save bar — sticky, มี scroll-toggle อยู่นอกบาร์ขวามือ */
 .save-btn-wrap { position: sticky; bottom: 0; margin-top: 10px; z-index: 100; display: flex; align-items: center; gap: 12px; }
 .save-btn-wrap #saveAdminBtn { margin-top: 0; flex: 1; min-width: 0; }
@@ -1358,6 +1369,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let adminBaselineSnapshot = null;
     let adminAutosaveTimer = null;
     let adminDraftSaveTimer = null;
+    // [Multi-Admin v2] track lock ของ admin คนอื่น + catalog version เพื่อ auto-refresh
+    let adminOtherLockedResources = new Map(); // key = "type:id" → { type, id, lockedBy }
+    let adminLastCatalogVersion = 0;
+    let adminAutoRefreshInFlight = false;
 
     /* layout settings */
     let layoutMob = { radius: 18, innerRadius: 14, shadow: 10, padding: 10, imgHeight: 140, cols: 2, gap: 12 };
@@ -2884,6 +2899,124 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (saveBtn && !saveBtn.classList.contains('saving')) saveBtn.disabled = isGasConfigured() && !adminLockHeld;
     }
 
+    /* ============================================================
+       [Multi-Admin v2] Realtime sync — process lockedResources + catalogVersion
+       เรียกจาก heartbeat response และ startAdminSession response
+       ============================================================ */
+    function processAdminRealtimeData(data, skipRefresh) {
+        if (!data) return;
+
+        // 1) อัพเดท map ของ lock จาก admin คนอื่น
+        const next = new Map();
+        const list = Array.isArray(data.lockedResources) ? data.lockedResources : [];
+        list.forEach(lk => {
+            if (!lk || !lk.type || !lk.id) return;
+            next.set(String(lk.type) + ':' + String(lk.id), {
+                type: String(lk.type),
+                id: String(lk.id),
+                lockedBy: String(lk.lockedBy || 'แอดมินคนอื่น')
+            });
+        });
+        adminOtherLockedResources = next;
+        applyOtherAdminLocksToUi();
+
+        // 2) เช็ค catalog version — ถ้า server ใหม่กว่า → admin คนอื่นเพิ่งเซฟ → auto-refresh
+        //    acquireAdminLock เซ็ต adminLastCatalogVersion ก่อนเรียกแล้วส่ง skipRefresh=true → กัน false-positive ตอน start session
+        const serverVer = Number(data.catalogVersion) || 0;
+        if (serverVer > adminLastCatalogVersion) {
+            adminLastCatalogVersion = serverVer;
+            if (!skipRefresh) autoRefreshAdminCatalog();
+        }
+    }
+
+    /* ทำ UI lock บนหน้าหมวดที่ admin คนอื่นถืออยู่ — แสดง banner + disable inputs/buttons */
+    function applyOtherAdminLocksToUi() {
+        // tab indicator (sidebar) — เติม class 'locked-other' บน tab ของหมวดที่ถูก lock
+        document.querySelectorAll('.admin-cat-tab').forEach(tab => {
+            const cid = tab.dataset.catId;
+            if (!cid) return;
+            const key = 'category:' + cid;
+            tab.classList.toggle('locked-other', adminOtherLockedResources.has(key));
+        });
+
+        // content (ฝั่งขวา) — ถ้า activeAdminCatId ติด lock คนอื่น → ใส่ banner + ลบ class readonly เดิม + ใส่ใหม่
+        const listEl = $('adminCategoryList');
+        if (!listEl) return;
+        const block = listEl.querySelector('.admin-cat-block');
+        // ลบ banner เดิมถ้ามี
+        const oldBanner = listEl.querySelector('.admin-cat-locked-banner');
+        if (oldBanner) oldBanner.remove();
+        if (block) block.classList.remove('admin-cat-readonly');
+
+        if (!activeAdminCatId || !block) return;
+        const lockInfo = adminOtherLockedResources.get('category:' + activeAdminCatId);
+        if (!lockInfo) return;
+
+        // แสดง banner + lock content
+        const banner = document.createElement('div');
+        banner.className = 'admin-cat-locked-banner';
+        banner.innerHTML =
+            '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<rect x="3" y="11" width="18" height="11" rx="2"/>' +
+                '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
+            '</svg>' +
+            '<span>หมวดนี้กำลังถูกแก้ไขโดย <strong>' + esc(lockInfo.lockedBy) + '</strong> — รอจนกว่าจะบันทึกเสร็จ หน้าจะรีเฟรชอัตโนมัติ</span>';
+        listEl.insertBefore(banner, block);
+        block.classList.add('admin-cat-readonly');
+    }
+
+    /* auto-refresh เมื่อ admin คนอื่นเซฟแล้ว — preserve unsaved local edits ของตัวเอง + คงหน้าเดิม */
+    async function autoRefreshAdminCatalog() {
+        if (adminAutoRefreshInFlight) return;
+        if (!isGasConfigured()) return;
+        adminAutoRefreshInFlight = true;
+        try {
+            // 1) เก็บ patch ของตัวเองก่อน (เฉพาะ resource ที่ตัวเองถือ lock อยู่ = unsaved local edits)
+            const myPatch = adminDirty ? buildAdminPatch() : null;
+
+            // 2) fetch latest catalog
+            const res = await fetch(GAS_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'loadCatalog', key: GAS_SECRET_KEY }),
+                redirect: 'follow',
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const text = await res.text();
+            const data = JSON.parse(text);
+            const isOk = (data.ok === true) || (data.success === true);
+            if (!isOk) throw new Error(data.error || 'load failed');
+
+            // 3) เอา catalog ใหม่มาเป็น baseline + state
+            if (Array.isArray(data.categories)) categories = cloneAdminData(data.categories) || [];
+            if (Array.isArray(data.products)) products = cloneAdminData(data.products) || [];
+            if (data.settings && Object.keys(data.settings).length) applyLoadedSettings(data.settings);
+            filteredProducts = products.slice();
+            adminBaselineSnapshot = makeAdminSnapshot();
+
+            // 4) ใส่ patch ของตัวเอง (unsaved local) ทับลงไป — เพื่อไม่ให้ผู้ใช้งานเสีย work ของตัวเอง
+            //    (resource ที่ตัวเองถือ lock = คนอื่นแก้ทับไม่ได้ ดังนั้น local edits ปลอดภัย)
+            if (myPatch && hasAdminPatchChanges(myPatch)) {
+                applyAdminPatchLocally(myPatch);
+            }
+
+            // 5) ถ้า activeAdminCatId ที่เปิดอยู่ถูกลบหายไป — เลือกหมวดแรกแทน (ไม่ปิด modal)
+            if (activeAdminCatId && !categories.some(c => c.id === activeAdminCatId)) {
+                activeAdminCatId = categories.length ? categories[0].id : null;
+            }
+
+            // 6) re-render โดยคง modal เปิดอยู่ + applyOtherAdminLocksToUi ใหม่ (เผื่อ admin คนอื่นยังถือ lock)
+            renderCatalog(); renderNav(); renderAdminCategories(); syncSliders();
+            applyOtherAdminLocksToUi();
+
+            showToast('ข้อมูลถูกอัพเดทจากแอดมินคนอื่น — รีเฟรชแล้ว');
+        } catch (e) {
+            console.warn('[autoRefreshAdminCatalog]', e);
+        } finally {
+            adminAutoRefreshInFlight = false;
+        }
+    }
+
     async function acquireAdminLock(force) {
         if (!isGasConfigured()) {
             adminLockHeld = true;
@@ -2904,6 +3037,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             setAdminLockUi('held', data);
             startAdminHeartbeat();
             startAdminAutosave();
+            // [Multi-Admin v2] ตั้ง baseline version + initial lockedResources
+            // ตอนเปิด admin ครั้งแรก: ไม่ต้อง refresh แม้ version จะมีอยู่ — ข้อมูลที่โหลดมาเป็น current แล้ว
+            adminLastCatalogVersion = Number(data.catalogVersion) || 0;
+            processAdminRealtimeData(data, /*skipRefresh=*/true);
             showToast('เข้าแอดมินพร้อมแก้ไขแล้ว');
             return true;
         } catch (err) {
@@ -2933,6 +3070,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const data = await adminLockRequest('adminSessionHeartbeat', { sessionId: adminSessionId }, 10000);
             adminHeartbeatFails = 0;
             setAdminLockUi('held', data);
+            // [Multi-Admin v2] process lockedResources + catalogVersion จาก response
+            processAdminRealtimeData(data);
         } catch (err) {
             const data = err && err.data ? err.data : {};
             if (data.code === 'SESSION_EXPIRED' || data.code === 'SESSION_NOT_FOUND') {
@@ -2992,6 +3131,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก แต่ระบบ autosave draft ไว้แล้ว ต้องการปิดหรือไม่?')) return;
         $('adminModal').classList.remove('open');
         adminDirty = false; // ปิดแล้วก็ reset (กันค้าง state ข้ามรอบ)
+        // [Multi-Admin v2] clear realtime state — กันค้างเมื่อเปิดใหม่
+        adminOtherLockedResources.clear();
+        adminLastCatalogVersion = 0;
+        adminAutoRefreshInFlight = false;
         await releaseAdminLock(false);
         setAdminLockUi('idle');
     }
@@ -3103,6 +3246,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         }
         renderAdminCatTabs();
         renderAdminCatContent();
+        // [Multi-Admin v2] หลัง render เสร็จ — apply lock UI ของ admin คนอื่น
+        if (typeof applyOtherAdminLocksToUi === 'function') applyOtherAdminLocksToUi();
     }
 
     function renderAdminCatTabs() {
@@ -3159,6 +3304,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         // update active state ใน sidebar tabs โดยไม่ต้อง re-render ทั้งหมด
         document.querySelectorAll('.admin-cat-tab').forEach(t => t.classList.toggle('active', t.dataset.catId === catId));
         renderAdminCatContent();
+        // [Multi-Admin v2] หลัง render content ใหม่ — apply lock UI
+        if (typeof applyOtherAdminLocksToUi === 'function') applyOtherAdminLocksToUi();
         // scroll content เข้ามาในมุมมอง (สำหรับ mobile ที่ tab strip อยู่ด้านบน)
         const content = $('adminCategoryList'); if (content) content.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
