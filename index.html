@@ -1157,7 +1157,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const SEARCH_DEBOUNCE_MS = 200;
 
     // ⚠️ ใส่ URL ของ GAS Web App ที่ Deploy แล้วตรงนี้
-    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzhdt6CD9iVgH-t9phBo7uUuzCL5LGcU27UZvr4ySq2jlhZeYfAJjb_Yn26DoHpHvf_/exec';
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyQhqzSEpYR8djNgN642lpg_XULQKKDG9Jsse82PZRUzzRGzSGamAfcs46RkDucPDAn/exec';
 
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
@@ -2668,26 +2668,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     function saveAdminLocalDraft() {
-        if (!adminDirty) return;
-        try {
-            localStorage.setItem(adminDraftStorageKey(), JSON.stringify({
-                adminName,
-                updatedAt: Date.now(),
-                snapshot: makeAdminSnapshot()
-            }));
-        } catch (e) {
-            console.warn('[admin local draft]', e);
-        }
+        // [Manual save mode] ปิด draft/autosave ทั้งหมด เพื่อไม่ให้ draft ข้ามแอดมินหรือข้ามเครื่อง
+        return;
     }
 
     function clearAdminLocalDraft() {
-        try { localStorage.removeItem(adminDraftStorageKey()); } catch (e) {}
+        try {
+            localStorage.removeItem(adminDraftStorageKey());
+            localStorage.removeItem('loeiAdminDraft:Admin');
+        } catch (e) {}
     }
 
     function scheduleAdminAutosave() {
-        // [Autosave disabled] — เก็บแค่ local draft เพื่อกันปิด browser หาย
-        // ไม่ flush ไป server, ไม่ตั้ง timer (ผู้ใช้กดบันทึกเอง)
-        saveAdminLocalDraft();
+        // [Manual save mode] no-op
+        return;
     }
 
     function startAdminAutosave() {
@@ -2728,13 +2722,12 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         return null;
     }
 
-    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — เก็บ local draft กันปิด browser หาย, พยายาม Lock เฉพาะรายการที่แตะ
-    // หมายเหตุ: server autosave ถูกปิด — ผู้ใช้ต้องกด "บันทึกทั้งหมด" เอง
+    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — ผู้ใช้ต้องกด "บันทึกทั้งหมด" เอง
     function markAdminDirty(arg) {
+        if (arg && arg.target && isAdminEditTargetBlocked(arg.target)) return;
         adminDirty = true;
         const resource = getAdminResourceFromDirtyArg(arg);
         if (resource) touchAdminResource(resource.type, resource.id);
-        saveAdminLocalDraft();
     }
 
     function ensureAdminSession() {
@@ -2795,8 +2788,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             }
         };
         if (patch && patch.products) {
-            (patch.products.upsert || []).forEach(p => add('product', p && p.id));
-            (patch.products.delete || []).forEach(id => add('product', id));
+            (patch.products.upsert || []).forEach(p => {
+                add('product', p && p.id);
+                add('category', p && p.catId);
+            });
+            (patch.products.delete || []).forEach(id => {
+                add('product', id);
+                add('category', getProductCategoryId(id));
+            });
         }
         if (patch && patch.categories) {
             (patch.categories.upsert || []).forEach(c => add('category', c && c.id));
@@ -2809,6 +2808,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     function touchAdminResource(type, id) {
         if (!type || !id) return;
         ensureAdminResourceLock(type, id, false);
+        // Room model: ถ้าแตะสินค้า ให้ยึดหมวดของสินค้านั้นด้วย เพื่อให้แอดมินคนอื่นเห็นทั้งหมวดเป็นสีเทาและเข้าแก้ไม่ได้
+        if (type === 'product') {
+            const p = products.find(x => String(x.id) === String(id));
+            if (p && p.catId) ensureAdminResourceLock('category', p.catId, false);
+        }
     }
 
     async function ensureAdminResourceLock(type, id, force) {
@@ -2910,14 +2914,53 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         }
     }
 
+    function getProductCategoryId(pid) {
+        const p = products.find(x => String(x.id) === String(pid));
+        if (p && p.catId) return String(p.catId);
+        const base = adminBaselineSnapshot && Array.isArray(adminBaselineSnapshot.products)
+            ? adminBaselineSnapshot.products.find(x => String(x.id) === String(pid))
+            : null;
+        return base && base.catId ? String(base.catId) : '';
+    }
+
+    function getCategoryLockInfo(catId) {
+        catId = String(catId || '');
+        if (!catId) return null;
+
+        const direct = adminOtherLockedResources.get('category:' + catId);
+        if (direct) return direct;
+
+        for (const lockInfo of adminOtherLockedResources.values()) {
+            if (!lockInfo || lockInfo.type !== 'product') continue;
+            if (getProductCategoryId(lockInfo.id) === catId) return lockInfo;
+        }
+        return null;
+    }
+
+    function getTargetCategoryIdForLock(target) {
+        if (!target || !target.closest || !target.closest('#adminCategoryList')) return '';
+        if (target.dataset && target.dataset.catId) return String(target.dataset.catId);
+        if (target.dataset && target.dataset.pid) return getProductCategoryId(target.dataset.pid);
+        const block = target.closest('.admin-cat-block');
+        if (block && block.id && block.id.indexOf('admin-block-') === 0) return block.id.replace('admin-block-', '');
+        return activeAdminCatId || '';
+    }
+
+    function isAdminEditTargetBlocked(target) {
+        if (!target || !target.closest || !target.closest('#adminCategoryList')) return false;
+        const action = target.dataset ? target.dataset.action : '';
+        if (action === 'selectAdminCat' || action === 'toggleAdminCat') return false;
+        const catId = getTargetCategoryIdForLock(target);
+        return !!getCategoryLockInfo(catId);
+    }
+
     /* ทำ UI lock บนหน้าหมวดที่ admin คนอื่นถืออยู่ — แสดง banner + disable inputs/buttons */
     function applyOtherAdminLocksToUi() {
         // tab indicator (sidebar) — เติม class 'locked-other' บน tab ของหมวดที่ถูก lock
         document.querySelectorAll('.admin-cat-tab').forEach(tab => {
             const cid = tab.dataset.catId;
             if (!cid) return;
-            const key = 'category:' + cid;
-            tab.classList.toggle('locked-other', adminOtherLockedResources.has(key));
+            tab.classList.toggle('locked-other', !!getCategoryLockInfo(cid));
         });
 
         // content (ฝั่งขวา) — ถ้า activeAdminCatId ติด lock คนอื่น → ใส่ banner + ลบ class readonly เดิม + ใส่ใหม่
@@ -2934,7 +2977,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (block) block.classList.remove('admin-cat-readonly');
 
         if (!activeAdminCatId || !block) return;
-        const lockInfo = adminOtherLockedResources.get('category:' + activeAdminCatId);
+        const lockInfo = getCategoryLockInfo(activeAdminCatId);
         if (!lockInfo) return;
 
         // 1) banner สีแดงด้านบน (context เสริม)
@@ -3135,7 +3178,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     async function closeAdmin() {
         // ถ้ามีการแก้ไขที่ยังไม่บันทึก → ถามก่อน
-        if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก แต่ระบบ autosave draft ไว้แล้ว ต้องการปิดหรือไม่?')) return;
+        if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก ต้องการปิดหรือไม่? ข้อมูลที่ยังไม่กดบันทึกจะหาย')) return;
         $('adminModal').classList.remove('open');
         adminDirty = false; // ปิดแล้วก็ reset (กันค้าง state ข้ามรอบ)
         // [Multi-Admin v2] clear realtime state — กันค้างเมื่อเปิดใหม่
@@ -3863,6 +3906,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             openProductPopup(e.target.closest('.card').dataset.id); return;
         }
         if (!target) return;
+        if (isAdminEditTargetBlocked(target)) {
+            e.preventDefault();
+            showToast('หมวดนี้กำลังถูกแอดมินคนอื่นแก้ไขอยู่');
+            return;
+        }
         const { action, pid, catId, idx, delta, size, tpl, tab } = target.dataset;
         switch (action) {
             case 'closeCart':       closeCart(); break;
@@ -3912,6 +3960,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function handleDelegatedChange(e) {
         const target = e.target.closest('[data-action]'); if (!target) return;
+        if (isAdminEditTargetBlocked(target)) {
+            e.preventDefault();
+            showToast('หมวดนี้กำลังถูกแอดมินคนอื่นแก้ไขอยู่');
+            return;
+        }
         const { action, pid, idx, field } = target.dataset;
         switch (action) {
             case 'updateField':     updateField(pid, field, target.value); break;
@@ -3924,6 +3977,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function handleDelegatedInput(e) {
         const target = e.target.closest('[data-action]'); if (!target) return;
+        if (isAdminEditTargetBlocked(target)) {
+            e.preventDefault();
+            showToast('หมวดนี้กำลังถูกแอดมินคนอื่นแก้ไขอยู่');
+            return;
+        }
         const { action, catId } = target.dataset;
         if (action === 'updateCatName') updateCatName(catId, target.value);
     }
