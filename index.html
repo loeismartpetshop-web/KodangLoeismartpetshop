@@ -467,7 +467,7 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 #saveAdminBtn.success { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
 #saveAdminBtn.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
 #saveAdminBtn .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
-.admin-lock-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; color: #4b5563; font-size: 12px; line-height: 1.35; }
+.admin-lock-bar { position: sticky; top: 30px; z-index: 99; display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; color: #4b5563; font-size: 12px; line-height: 1.35; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .admin-lock-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
 .admin-lock-text { flex: 1; min-width: 0; }
 .admin-lock-bar.held { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
@@ -688,7 +688,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <button class="cat-btn" id="catBtn">หมวดหมู่สินค้า ▾</button>
             <div class="cat-menu" id="catMenu"></div>
         </div>
-        <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาสินค้า...">
+        <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาสินค้า..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="cart-btn" id="cartBtn" title="ตะกร้าสินค้า">
             <svg class="ic ic-lg"><use href="#ic-cart"/></svg><span class="cart-badge" id="cartBadge">0</span>
         </button>
@@ -1166,7 +1166,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const LONGDO_MAP_KEY = '32344a31ec7f657884db5a210abb2df4';
     const LONGDO_DEFAULT_LAT = 17.49428;
     const LONGDO_DEFAULT_LON = 101.71323;
-    const ADMIN_HEARTBEAT_MS = 30000;
+    const ADMIN_HEARTBEAT_MS = 5000;
     const ADMIN_AUTOSAVE_MS = 15000;
     const ADMIN_LOCAL_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     let longdoMapApiPromise = null;
@@ -2685,14 +2685,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     function scheduleAdminAutosave() {
+        // [Autosave disabled] — เก็บแค่ local draft เพื่อกันปิด browser หาย
+        // ไม่ flush ไป server, ไม่ตั้ง timer (ผู้ใช้กดบันทึกเอง)
         saveAdminLocalDraft();
-        if (adminDraftSaveTimer) clearTimeout(adminDraftSaveTimer);
-        adminDraftSaveTimer = setTimeout(flushAdminServerDraft, 1200);
     }
 
     function startAdminAutosave() {
+        // [Autosave disabled] — no-op
         stopAdminAutosave();
-        adminAutosaveTimer = setInterval(flushAdminServerDraft, ADMIN_AUTOSAVE_MS);
     }
 
     function stopAdminAutosave() {
@@ -2703,53 +2703,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     async function flushAdminServerDraft() {
-        if (!adminDirty || !isGasConfigured() || !adminSessionId || !adminLockHeld) return;
-        const patch = buildAdminPatch();
-        if (!hasAdminPatchChanges(patch)) return;
-        try {
-            await adminLockRequest('saveAdminDraft', {
-                sessionId: adminSessionId,
-                adminName,
-                draft: { updatedAt: Date.now(), patch }
-            }, 12000);
-        } catch (e) {
-            console.warn('[admin server draft]', e);
-        }
+        // [Autosave disabled] — no-op (เก็บ function ไว้เผื่อมีที่อื่นเรียก)
+        return;
     }
 
     async function maybeRestoreAdminDraft() {
-        let restored = false;
-        try {
-            const raw = localStorage.getItem(adminDraftStorageKey());
-            if (raw) {
-                const draft = JSON.parse(raw);
-                if (draft && draft.snapshot && Date.now() - (draft.updatedAt || 0) <= ADMIN_LOCAL_DRAFT_TTL_MS) {
-                    if (confirm('พบ draft ที่ autosave ไว้ ต้องการกู้คืนหรือไม่?')) {
-                        applyAdminSnapshot(draft.snapshot);
-                        adminDirty = true;
-                        restored = true;
-                        showToast('กู้คืน draft แล้ว');
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('[restore local draft]', e);
-        }
-
-        if (!restored && isGasConfigured() && adminSessionId) {
-            try {
-                const data = await adminLockRequest('getAdminDraft', { sessionId: adminSessionId, adminName }, 12000);
-                if (data && data.draft && data.draft.patch && confirm('พบ draft จากระบบ ต้องการกู้คืนหรือไม่?')) {
-                    applyAdminPatchLocally(data.draft.patch);
-                    adminDirty = true;
-                    restored = true;
-                    showToast('กู้คืน draft จากระบบแล้ว');
-                }
-            } catch (e) {
-                console.warn('[restore server draft]', e);
-            }
-        }
-        if (restored) scheduleAdminAutosave();
+        // [Draft restore disabled] — ปิดทั้งหมด เพื่อกัน draft ของแอดมินคนอื่นโผล่ข้ามคน
+        // ถ้าผู้ใช้ปิดเว็บ/refresh จะเสีย unsaved edits ไป — แลกกับความถูกต้องของ data
+        return;
     }
 
     function getAdminResourceFromTarget(target) {
@@ -2767,12 +2728,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         return null;
     }
 
-    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — autosave draft และพยายาม Lock เฉพาะรายการที่แตะ
+    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — เก็บ local draft กันปิด browser หาย, พยายาม Lock เฉพาะรายการที่แตะ
+    // หมายเหตุ: server autosave ถูกปิด — ผู้ใช้ต้องกด "บันทึกทั้งหมด" เอง
     function markAdminDirty(arg) {
         adminDirty = true;
         const resource = getAdminResourceFromDirtyArg(arg);
         if (resource) touchAdminResource(resource.type, resource.id);
-        scheduleAdminAutosave();
+        saveAdminLocalDraft();
     }
 
     function ensureAdminSession() {
@@ -2878,6 +2840,15 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const data = err && err.data ? err.data : {};
             adminLastBlockedResource = { type, id };
             setAdminLockUi(data.code === 'RESOURCE_LOCKED' ? 'blocked' : 'offline', data);
+            // [Fix 3] ถ้าโดน RESOURCE_LOCKED → inject เข้า map ทันที + apply overlay
+            // ไม่ต้องรอ heartbeat รอบถัดไป (5s) — แอดมิน 2 เห็น overlay เด้งทันที
+            if (data.code === 'RESOURCE_LOCKED') {
+                adminOtherLockedResources.set(adminResourceKey(type, id), {
+                    type, id,
+                    lockedBy: String(data.lockedBy || 'แอดมินคนอื่น')
+                });
+                applyOtherAdminLocksToUi();
+            }
             showToast(data.error || 'ยังไม่ได้สิทธิ์แก้ไขรายการนี้');
             return false;
         }
