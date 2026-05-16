@@ -370,7 +370,7 @@
 .admin-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9500; overflow-y: auto; }
 .admin-modal.open { display: block; }
 .admin-panel { background: #fff; width: calc(100% - 30px); max-width: 660px; margin: 20px auto 40px; border-radius: 16px; padding: 24px; }
-.admin-header { position: sticky; top: -24px; background: #fff; z-index: 100; padding: 20px 0 15px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; border-radius: 16px 16px 0 0; }
+.admin-header { position: sticky; top: 0; background: #fff; z-index: 130; padding: 20px 0 15px 0; border-bottom: 1px solid #e5e7eb; margin: -24px -24px 18px; display: flex; justify-content: space-between; align-items: center; padding-left: 24px; padding-right: 24px; border-radius: 16px 16px 0 0; }
 .admin-header h3 { font-size: 18px; font-weight: 700; }
 .admin-section { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6; }
 .admin-section:last-of-type { border-bottom: none; }
@@ -467,7 +467,7 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 #saveAdminBtn.success { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
 #saveAdminBtn.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
 #saveAdminBtn .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
-.admin-lock-bar { position: sticky; top: 30px; z-index: 99; display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; color: #4b5563; font-size: 12px; line-height: 1.35; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.admin-lock-bar { position: sticky; top: 72px; z-index: 125; display: flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; color: #4b5563; font-size: 12px; line-height: 1.35; box-shadow: 0 8px 20px rgba(15,23,42,0.10); }
 .admin-lock-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
 .admin-lock-text { flex: 1; min-width: 0; }
 .admin-lock-bar.held { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
@@ -1166,7 +1166,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const LONGDO_MAP_KEY = '32344a31ec7f657884db5a210abb2df4';
     const LONGDO_DEFAULT_LAT = 17.49428;
     const LONGDO_DEFAULT_LON = 101.71323;
-    const ADMIN_HEARTBEAT_MS = 5000;
+    const ADMIN_HEARTBEAT_MS = 15000;
     const ADMIN_AUTOSAVE_MS = 15000;
     const ADMIN_LOCAL_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     let longdoMapApiPromise = null;
@@ -1374,6 +1374,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let adminLockHeld = false;
     let adminHeartbeatTimer = null;
     let adminHeartbeatFails = 0;
+    let adminSessionRecovering = false;
     let adminResourceLocks = new Map();
     let adminLastBlockedResource = null;
     let adminBaselineSnapshot = null;
@@ -2807,12 +2808,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
     function touchAdminResource(type, id) {
         if (!type || !id) return;
-        ensureAdminResourceLock(type, id, false);
         // Room model: ถ้าแตะสินค้า ให้ยึดหมวดของสินค้านั้นด้วย เพื่อให้แอดมินคนอื่นเห็นทั้งหมวดเป็นสีเทาและเข้าแก้ไม่ได้
         if (type === 'product') {
             const p = products.find(x => String(x.id) === String(id));
-            if (p && p.catId) ensureAdminResourceLock('category', p.catId, false);
+            if (p && p.catId) {
+                ensureAdminResourceLock('category', p.catId, false).then(ok => {
+                    if (ok) ensureAdminResourceLock('product', id, false);
+                });
+                return;
+            }
         }
+        ensureAdminResourceLock(type, id, false);
     }
 
     async function ensureAdminResourceLock(type, id, force) {
@@ -2861,6 +2867,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     async function ensureAdminLocksForPatch(patch) {
         const resources = getAdminResourcesFromPatch(patch);
         for (const resource of resources) {
+            // ก่อน save ต้อง renew lock กับ server จริงเสมอ กัน local map ค้างหลัง heartbeat สะดุด
+            adminResourceLocks.delete(adminResourceKey(resource.type, resource.id));
             const ok = await ensureAdminResourceLock(resource.type, resource.id, false);
             if (!ok) return false;
         }
@@ -2878,10 +2886,37 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         else if (state === 'blocked' && data && data.code === 'ADMIN_LIMIT_REACHED') text.textContent = data.error || 'มีแอดมินใช้งานครบแล้ว';
         else if (state === 'blocked') text.textContent = 'รายการนี้กำลังถูกแก้โดย: ' + holder;
         else if (state === 'lost') text.textContent = 'Session/Lock หลุด — กรุณาเข้าแอดมินใหม่';
-        else if (state === 'offline') text.textContent = 'การเชื่อมต่อหลุด — กรุณาบันทึกและออก';
+        else if (state === 'offline') text.textContent = 'การเชื่อมต่อไม่เสถียร — ระบบกำลังลองต่อให้อัตโนมัติ';
         else text.textContent = 'ยังไม่ได้เข้า session แอดมิน';
         if (forceBtn) forceBtn.style.display = (state === 'blocked' && adminLastBlockedResource) ? '' : 'none';
         if (saveBtn && !saveBtn.classList.contains('saving')) saveBtn.disabled = isGasConfigured() && !adminLockHeld;
+    }
+
+    async function recoverAdminSession(data) {
+        if (!isGasConfigured() || !adminSessionId || adminSessionRecovering) return false;
+        adminSessionRecovering = true;
+        setAdminLockUi('checking', data);
+        try {
+            ensureAdminSession();
+            const result = await adminLockRequest('startAdminSession', {
+                sessionId: adminSessionId,
+                adminName,
+                deviceInfo: navigator.userAgent || ''
+            }, 15000);
+            adminLockHeld = true;
+            adminHeartbeatFails = 0;
+            setAdminLockUi('held', result);
+            processAdminRealtimeData(result, /*skipRefresh=*/true);
+            startAdminHeartbeat();
+            showToast('ต่อ session แอดมินใหม่แล้ว');
+            return true;
+        } catch (err) {
+            const errData = err && err.data ? err.data : {};
+            setAdminLockUi(errData.code === 'ADMIN_LIMIT_REACHED' ? 'blocked' : 'offline', errData);
+            return false;
+        } finally {
+            adminSessionRecovering = false;
+        }
     }
 
     /* ============================================================
@@ -3125,20 +3160,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         } catch (err) {
             const data = err && err.data ? err.data : {};
             if (data.code === 'SESSION_EXPIRED' || data.code === 'SESSION_NOT_FOUND') {
-                adminLockHeld = false;
-                stopAdminHeartbeat();
-                stopAdminAutosave();
-                setAdminLockUi('lost', data);
-                showToast(data.error || 'Session แอดมินหมดอายุ');
+                const recovered = await recoverAdminSession(data);
+                if (!recovered) {
+                    setAdminLockUi('offline', data);
+                    showToast(data.error || 'Session แอดมินสะดุด — ระบบจะลองต่อให้อัตโนมัติ');
+                }
                 return;
             }
             adminHeartbeatFails++;
             if (adminHeartbeatFails >= 2) {
-                adminLockHeld = false;
-                stopAdminHeartbeat();
-                stopAdminAutosave();
                 setAdminLockUi('offline', data);
-                showToast('การเชื่อมต่อหลุด — กรุณาบันทึกและออก');
+                showToast('การเชื่อมต่อไม่เสถียร — ยังไม่ตัดสิทธิ์แก้ไข');
             }
         }
     }
@@ -3693,10 +3725,12 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const isResourceError = code.indexOf('RESOURCE_') === 0;
             const isLockError = isSessionError || isResourceError;
             if (isSessionError) {
-                adminLockHeld = false;
-                stopAdminHeartbeat();
-                stopAdminAutosave();
-                setAdminLockUi(code === 'LOCK_BUSY' ? 'offline' : 'lost', err.data);
+                if (code.indexOf('SESSION_') === 0) {
+                    const recovered = await recoverAdminSession(err.data);
+                    if (!recovered) setAdminLockUi('offline', err.data);
+                } else {
+                    setAdminLockUi('offline', err.data);
+                }
             } else if (isResourceError) {
                 setAdminLockUi('blocked', err.data);
             }
@@ -3705,7 +3739,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             setTimeout(() => {
                 btn.disabled = false; btn.classList.remove('error');
                 setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
-                setAdminLockUi(isResourceError ? 'blocked' : (isSessionError ? 'lost' : (adminLockHeld ? 'held' : 'idle')), err && err.data);
+                setAdminLockUi(isResourceError ? 'blocked' : (adminLockHeld ? 'held' : 'offline'), err && err.data);
             }, 2000);
         }
     }
