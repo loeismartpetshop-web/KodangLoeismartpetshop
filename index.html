@@ -1276,6 +1276,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let gradientDeg = 135;
     let currentTemplate = 'double';
     let activeAdminCatId = null; // หมวดที่ admin กำลังเปิดดู/แก้ไข (ใช้ใน sidebar layout)
+    let adminDirty = false; // true เมื่อ admin มีการแก้ไขที่ยังไม่กด "บันทึกทั้งหมด" — ใช้เตือนตอนเผลอปิด
     let logoDataUrl = ''; // โลโก้ navbar
     let splashLogoData = ''; // ★ โลโก้ splash screen (แยกจาก navbar)
     const customerId = 'CUS-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -1672,6 +1673,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         promoImgs.splice(i, 1);
         promoImgData = promoImgs[0] || '';
         renderPromoAdminList();
+        markAdminDirty();
         showToast('ลบรูปแล้ว');
     }
 
@@ -1937,17 +1939,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     window.adminAddBank = function() {
         if (bankData.length >= 5) return;
         bankData.push({name:'', acc:'', owner:'', logo:''});
-        renderAdminBanks();
+        renderAdminBanks(); markAdminDirty();
     };
     window.adminRemoveBank = function(i) {
         if (bankData.length <= 1) return;
         bankData.splice(i, 1);
-        renderAdminBanks();
+        renderAdminBanks(); markAdminDirty();
     };
     window.adminBankLogoUpload = async function(e, i) {
         const f = e.target.files[0]; if (!f) return;
         bankData[i].logo = await fileToBase64(f);
-        renderAdminBanks();
+        renderAdminBanks(); markAdminDirty();
         showToast('อัปโหลดโลโก้แล้ว');
     };
 
@@ -1986,22 +1988,22 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     window.adminAddQr = function() {
         if (qrData.length >= 5) return;
         qrData.push({name:'', logo:'', qr:''});
-        renderAdminQrs();
+        renderAdminQrs(); markAdminDirty();
     };
     window.adminRemoveQr = function(i) {
         if (qrData.length <= 1) return;
         qrData.splice(i, 1);
-        renderAdminQrs();
+        renderAdminQrs(); markAdminDirty();
     };
     window.adminQrLogoUpload = async function(e, i) {
         const f = e.target.files[0]; if (!f) return;
         qrData[i].logo = await fileToBase64(f);
-        renderAdminQrs(); showToast('อัปโหลดโลโก้ QR แล้ว');
+        renderAdminQrs(); markAdminDirty(); showToast('อัปโหลดโลโก้ QR แล้ว');
     };
     window.adminQrImgUpload = async function(e, i) {
         const f = e.target.files[0]; if (!f) return;
         qrData[i].qr = await fileToBase64(f);
-        renderAdminQrs(); showToast('อัปโหลด QR Code แล้ว');
+        renderAdminQrs(); markAdminDirty(); showToast('อัปโหลด QR Code แล้ว');
     };
 
     function startQrTimer() {
@@ -2456,8 +2458,20 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     /* ============================================================
        ADMIN PANEL
        ============================================================ */
-    function openAdmin() { renderColorSwatches(); renderAdminCategories(); syncSliders(); $('adminModal').classList.add('open'); }
-    function closeAdmin() { $('adminModal').classList.remove('open'); }
+    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — เรียกเมื่อใดก็ตามที่ data ใน admin เปลี่ยน
+    function markAdminDirty() { adminDirty = true; }
+
+    function openAdmin() {
+        adminDirty = false; // เริ่มจาก clean เพราะเพิ่งเปิด — ยังไม่ได้แก้อะไร
+        renderColorSwatches(); renderAdminCategories(); syncSliders();
+        $('adminModal').classList.add('open');
+    }
+    function closeAdmin() {
+        // ถ้ามีการแก้ไขที่ยังไม่บันทึก → ถามก่อน
+        if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก ต้องการปิดหรือไม่?')) return;
+        $('adminModal').classList.remove('open');
+        adminDirty = false; // ปิดแล้วก็ reset (กันค้าง state ข้ามรอบ)
+    }
 
     function renderColorSwatches() {
         const el = $('colorSwatches'); el.innerHTML = '';
@@ -2465,7 +2479,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             const s = document.createElement('div');
             s.className = 'color-swatch' + (color === currentTheme ? ' active' : '');
             s.style.background = color; s.title = color; s.dataset.color = color;
-            s.addEventListener('click', () => { applyTheme(color); $('customColorPicker').value = color; $('customColorHex').value = color; });
+            s.addEventListener('click', () => { applyTheme(color); $('customColorPicker').value = color; $('customColorHex').value = color; markAdminDirty(); });
             el.appendChild(s);
         });
     }
@@ -2480,6 +2494,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         document.body.classList.toggle('tpl-square', tpl === 'square');
         document.body.classList.toggle('tpl-double', tpl === 'double');
         updatePreviewCard();
+        markAdminDirty();
         showToast('เปลี่ยน Template แล้ว');
     }
 
@@ -2518,6 +2533,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         L.cols = parseInt($('sliderCols' + (tab === 'mob' ? 'Mob' : 'Dsk')).value) || L.cols;
         L.gap = parseInt($('sliderGap' + (tab === 'mob' ? 'Mob' : 'Dsk')).value) || L.gap;
         applyLayoutVars();
+        markAdminDirty();
         const btn = $(tab === 'mob' ? 'saveLayoutMobBtn' : 'saveLayoutDskBtn');
         if (btn) { btn.classList.add('saved'); btn.innerHTML = iconHTML('check') + ' บันทึกแล้ว'; setTimeout(() => { btn.classList.remove('saved'); btn.innerHTML = iconHTML('save') + ' ' + (tab === 'mob' ? 'บันทึกตั้งค่ามือถือ' : 'บันทึกตั้งค่าคอมพิวเตอร์'); }, 1500); }
         showToast('บันทึกเลเอาท์ ' + (tab === 'mob' ? 'มือถือ' : 'คอม') + ' แล้ว (กด บันทึกทั้งหมด เพื่อ sync)');
@@ -2636,7 +2652,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             activeAdminCatId = categories[idx] ? categories[idx].id : (categories[idx - 1] ? categories[idx - 1].id : (categories[0] ? categories[0].id : null));
         }
         renderAdminCategories();
-        renderNav(); showToast('ลบหมวดหมู่แล้ว');
+        renderNav(); markAdminDirty(); showToast('ลบหมวดหมู่แล้ว');
     }
 
     function buildAdminCard(p) {
@@ -2725,22 +2741,23 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     function removeSize(pid, idx) {
         const p = products.find(x => x.id === pid); if (!p) return;
         if (p.sizes.length <= 1) { if (confirm('สินค้านี้จะไม่มี Size เหลือ — ต้องการลบสินค้านี้ทิ้งด้วยหรือไม่?')) { deleteProduct(pid); } return; }
-        p.sizes.splice(idx, 1); refreshSizes(p);
+        p.sizes.splice(idx, 1); refreshSizes(p); markAdminDirty();
     }
-    function addSize(pid) { const p = products.find(x => x.id === pid); if (!p) return; p.sizes.push({ label: '', price: 0 }); refreshSizes(p); }
+    function addSize(pid) { const p = products.find(x => x.id === pid); if (!p) return; p.sizes.push({ label: '', price: 0 }); refreshSizes(p); markAdminDirty(); }
     function refreshSizes(p) { const el = $('sizes-' + p.id); if (!el) return; el.innerHTML = p.sizes.map((s, i) => buildAdminSizeRow(p.id, i, s)).join(''); }
     function toggleStock(pid) {
         const p = products.find(x => x.id === pid); if (!p) return; p.inStock = !p.inStock;
         const btn = $('stockbtn-' + pid); if (!btn) return;
         btn.className = 'admin-stock-btn ' + (p.inStock ? 'instock' : 'outstock');
         btn.innerHTML = iconHTML(p.inStock ? 'check' : 'close') + ' ' + (p.inStock ? 'มีสินค้า' : 'สินค้าหมด');
+        markAdminDirty();
     }
     function addProduct(catId) {
         const newId = 'p' + Date.now();
         const prod = { id: newId, catId, name: 'สินค้าใหม่', detail: '', sizes: [{ label: '200ml', price: 0 }], inStock: true, image: '' };
         products.push(prod);
         const prodsEl = $('admin-prods-' + catId); if (prodsEl) prodsEl.appendChild(buildAdminCard(prod));
-        updateCatCount(catId); showToast('เพิ่มสินค้าแล้ว');
+        updateCatCount(catId); markAdminDirty(); showToast('เพิ่มสินค้าแล้ว');
         const newCard = $('admin-prod-' + newId); if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function duplicateProduct(pid) {
@@ -2767,6 +2784,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             else prodsEl.appendChild(newCard);
         }
         updateCatCount(src.catId);
+        markAdminDirty();
         showToast('ทำซ้ำสินค้าแล้ว — กรุณาเพิ่มรูปภาพ');
         const newCard = $('admin-prod-' + newId); if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -2775,7 +2793,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const p = products.find(x => x.id === pid); const catId = p ? p.catId : null;
         products = products.filter(x => x.id !== pid);
         const card = $('admin-prod-' + pid); if (card) card.remove();
-        if (catId) updateCatCount(catId); showToast('ลบสินค้าแล้ว');
+        if (catId) updateCatCount(catId); markAdminDirty(); showToast('ลบสินค้าแล้ว');
     }
     function updateCatCount(catId) {
         const cnt = products.filter(p => p.catId === catId).length;
@@ -2797,6 +2815,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         activeAdminCatId = newId;
         renderAdminCategories();
         renderNav();
+        markAdminDirty();
         // focus ที่ input ชื่อหมวดในฝั่ง content เพื่อให้แก้ชื่อต่อทันที
         const nameInput = document.querySelector(`#admin-block-${newId} input[data-action="updateCatName"]`);
         if (nameInput) { nameInput.focus(); nameInput.select(); }
@@ -2811,6 +2830,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         p.stock = next;
         const input = document.querySelector(`.admin-stock-qty-input[data-pid="${pid}"]`);
         if (input) input.value = next;
+        markAdminDirty();
     }
 
     /* ============================================================
@@ -2841,6 +2861,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             btn.classList.remove('saving'); btn.classList.add('success');
             setSaveBtnState(btn, 'check', 'บันทึกแล้ว (โหมดทดลอง)');
             showToast('บันทึกในเครื่อง — GAS ยังไม่ได้ตั้งค่า');
+            adminDirty = false; // บันทึกสำเร็จแล้ว — closeAdmin จะไม่ถาม confirm
             setTimeout(() => {
                 btn.disabled = false; btn.classList.remove('success');
                 setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
@@ -2899,6 +2920,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             btn.classList.remove('saving'); btn.classList.add('success');
             setSaveBtnState(btn, 'check', 'บันทึกสำเร็จ');
             showToast('บันทึกขึ้น Sheet เรียบร้อย');
+            adminDirty = false; // บันทึกสำเร็จแล้ว — closeAdmin จะไม่ถาม confirm
             setTimeout(() => {
                 btn.disabled = false; btn.classList.remove('success');
                 setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
@@ -3002,6 +3024,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         $('cartModal').addEventListener('click', e => { if (e.target.id === 'cartModal') closeCart(); });
         $('adminAuthModal').addEventListener('click', e => { if (e.target.id === 'adminAuthModal') closeAdminAuth(); });
         $('adminModal').addEventListener('click', e => { if (e.target.id === 'adminModal') closeAdmin(); });
+        // [dirty tracking] mark admin ว่ามีการแก้ไขที่ยังไม่บันทึก ทุกครั้งที่ user พิมพ์/เปลี่ยนค่าใน admin
+        // ครอบคลุม: text input, number input, color picker, slider (range), file input, checkbox, select
+        // ถ้ามี action ที่ไม่ผ่าน input/change (เช่น addProduct, deleteProduct) จะเรียก markAdminDirty() ตรงๆ
+        $('adminModal').addEventListener('input', markAdminDirty);
+        $('adminModal').addEventListener('change', markAdminDirty);
         $('checkoutBtn').addEventListener('click', checkout);
         $('submitOrderBtn').addEventListener('click', submitOrder);
         $('slipInput').addEventListener('change', e => handleSlipUpload(e.target));
