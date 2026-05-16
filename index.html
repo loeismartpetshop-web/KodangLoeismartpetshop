@@ -467,6 +467,17 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 #saveAdminBtn.success { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
 #saveAdminBtn.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
 #saveAdminBtn .ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
+.admin-lock-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; color: #4b5563; font-size: 12px; line-height: 1.35; }
+.admin-lock-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
+.admin-lock-text { flex: 1; min-width: 0; }
+.admin-lock-bar.held { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.admin-lock-bar.held .admin-lock-dot { background: #22c55e; }
+.admin-lock-bar.checking { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.admin-lock-bar.checking .admin-lock-dot { background: #f59e0b; animation: pulse 1s infinite; }
+.admin-lock-bar.blocked, .admin-lock-bar.lost, .admin-lock-bar.offline { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.admin-lock-bar.blocked .admin-lock-dot, .admin-lock-bar.lost .admin-lock-dot, .admin-lock-bar.offline .admin-lock-dot { background: #ef4444; }
+.admin-force-lock-btn { border: none; background: #111827; color: #fff; border-radius: 8px; padding: 6px 9px; font-size: 11px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.admin-force-lock-btn:hover { background: #374151; }
 
 /* save bar — sticky, มี scroll-toggle อยู่นอกบาร์ขวามือ */
 .save-btn-wrap { position: sticky; bottom: 0; margin-top: 10px; z-index: 100; display: flex; align-items: center; gap: 12px; }
@@ -802,6 +813,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <h3><svg class="ic ic-lg"><use href="#ic-gear"/></svg> หลังบ้าน (Admin)</h3>
             <button class="drawer-close" data-action="closeAdmin" aria-label="ปิด"><svg class="ic ic-lg"><use href="#ic-close"/></svg></button>
         </div>
+        <div class="admin-lock-bar checking" id="adminLockBar">
+            <span class="admin-lock-dot"></span>
+            <span class="admin-lock-text" id="adminLockText">กำลังตรวจสอบสิทธิ์แก้ไข...</span>
+            <button class="admin-force-lock-btn" id="forceAdminLockBtn" type="button" style="display:none;">บังคับยึด Lock</button>
+        </div>
 
         <div class="admin-section">
             <div class="admin-section-title">โลโก้ร้านค้า (มุมบนซ้าย)</div>
@@ -1129,6 +1145,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const LONGDO_MAP_KEY = '32344a31ec7f657884db5a210abb2df4';
     const LONGDO_DEFAULT_LAT = 17.49428;
     const LONGDO_DEFAULT_LON = 101.71323;
+    const ADMIN_HEARTBEAT_MS = 30000;
     let longdoMapApiPromise = null;
 
     function loadLongdoMapApi() {
@@ -1245,7 +1262,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 } else {
                     // [non-retryable error] เช่น stock ไม่พอ — reject ทันที ไม่ retry
                     // เพราะ retry ก็จะได้ผลลัพธ์เดิม
-                    if (data.insufficientItems || data.nonRetryable) {
+                    if (data.insufficientItems || data.nonRetryable || (data.code && String(data.code).indexOf('LOCK_') === 0)) {
                         item.status = 'FAILED';
                         const idx = queue.indexOf(item);
                         if (idx > -1) queue.splice(idx, 1);
@@ -1329,6 +1346,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let selectedBankIdx = 0;
     let selectedQrIdx   = 0;
     let map, marker, qrTimerInterval;
+    let adminSessionId = '';
+    let adminName = '';
+    let adminLockHeld = false;
+    let adminHeartbeatTimer = null;
+    let adminHeartbeatFails = 0;
 
     /* layout settings */
     let layoutMob = { radius: 18, innerRadius: 14, shadow: 10, padding: 10, imgHeight: 140, cols: 2, gap: 12 };
@@ -2492,7 +2514,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
        ============================================================ */
     function openAdminAuth() { $('adminPwInput').value = ''; $('adminAuthModal').classList.add('open'); setTimeout(() => $('adminPwInput').focus(), 150); }
     function closeAdminAuth() { $('adminAuthModal').classList.remove('open'); }
-    function verifyAdmin() { if ($('adminPwInput').value === ADMIN_PASSWORD) { closeAdminAuth(); openAdmin(); } else { showToast('รหัสผ่านไม่ถูกต้อง'); $('adminPwInput').value = ''; $('adminPwInput').focus(); } }
+    async function verifyAdmin() {
+        if ($('adminPwInput').value !== ADMIN_PASSWORD) {
+            showToast('รหัสผ่านไม่ถูกต้อง'); $('adminPwInput').value = ''; $('adminPwInput').focus(); return;
+        }
+        closeAdminAuth();
+        await openAdmin();
+    }
 
     /* ============================================================
        ADMIN PANEL
@@ -2500,16 +2528,160 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — เรียกเมื่อใดก็ตามที่ data ใน admin เปลี่ยน
     function markAdminDirty() { adminDirty = true; }
 
-    function openAdmin() {
+    function ensureAdminSession() {
+        adminSessionId = sessionStorage.getItem('loeiAdminSessionId') || '';
+        if (!adminSessionId) {
+            const rand = (window.crypto && crypto.getRandomValues)
+                ? Array.from(crypto.getRandomValues(new Uint32Array(2))).map(n => n.toString(36)).join('')
+                : Math.random().toString(36).slice(2);
+            adminSessionId = 'adm-' + Date.now().toString(36) + '-' + rand;
+            sessionStorage.setItem('loeiAdminSessionId', adminSessionId);
+        }
+        adminName = sessionStorage.getItem('loeiAdminName') || '';
+        if (!adminName) {
+            adminName = (prompt('ชื่อแอดมินสำหรับล็อกการแก้ไข', 'Admin') || 'Admin').trim() || 'Admin';
+            sessionStorage.setItem('loeiAdminName', adminName);
+        }
+    }
+
+    function adminLockRequest(action, payload, timeoutMs) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs || 10000);
+        return fetch(GAS_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ ...(payload || {}), action, key: GAS_SECRET_KEY }),
+            redirect: 'follow',
+            signal: controller.signal,
+        }).then(async res => {
+            clearTimeout(timeoutId);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const text = await res.text();
+            const data = JSON.parse(text);
+            if (data.ok !== true && data.success !== true) {
+                const err = new Error(data.error || 'Admin lock error');
+                err.data = data;
+                throw err;
+            }
+            return data;
+        }).catch(err => {
+            clearTimeout(timeoutId);
+            throw err;
+        });
+    }
+
+    function setAdminLockUi(state, data) {
+        const bar = $('adminLockBar'), text = $('adminLockText'), forceBtn = $('forceAdminLockBtn'), saveBtn = $('saveAdminBtn');
+        if (!bar || !text) return;
+        bar.className = 'admin-lock-bar ' + state;
+        const holder = data && data.lockedBy ? data.lockedBy : 'แอดมินคนอื่น';
+        if (state === 'held') text.textContent = 'ล็อกการแก้ไขแล้ว: ' + (adminName || holder);
+        else if (state === 'checking') text.textContent = 'กำลังตรวจสอบสิทธิ์แก้ไข...';
+        else if (state === 'blocked') text.textContent = 'มีคนกำลังแก้ไขอยู่: ' + holder;
+        else if (state === 'lost') text.textContent = 'Lock หลุด — แอดมินคนอื่นยึดแล้ว';
+        else if (state === 'offline') text.textContent = 'การเชื่อมต่อหลุด — กรุณาบันทึกและออก';
+        else text.textContent = 'ยังไม่ได้ล็อกสิทธิ์แก้ไข';
+        if (forceBtn) forceBtn.style.display = (state === 'blocked' || state === 'lost' || state === 'offline') ? '' : 'none';
+        if (saveBtn && !saveBtn.classList.contains('saving')) saveBtn.disabled = isGasConfigured() && !adminLockHeld;
+    }
+
+    async function acquireAdminLock(force) {
+        if (!isGasConfigured()) {
+            adminLockHeld = true;
+            setAdminLockUi('held', { lockedBy: 'โหมดทดลอง' });
+            return true;
+        }
+        ensureAdminSession();
+        setAdminLockUi('checking');
+        try {
+            const data = await adminLockRequest(force ? 'forceAcquireLock' : 'acquireLock', {
+                sessionId: adminSessionId,
+                adminName
+            }, 12000);
+            adminLockHeld = true;
+            adminHeartbeatFails = 0;
+            setAdminLockUi('held', data);
+            startAdminHeartbeat();
+            showToast(force ? 'บังคับยึด Lock สำเร็จ' : 'ได้สิทธิ์แก้ไขแล้ว');
+            return true;
+        } catch (err) {
+            adminLockHeld = false;
+            stopAdminHeartbeat();
+            const data = err && err.data ? err.data : {};
+            setAdminLockUi(data.code === 'LOCKED' ? 'blocked' : 'offline', data);
+            showToast(data.error || 'ยังไม่ได้สิทธิ์แก้ไข');
+            return false;
+        }
+    }
+
+    function startAdminHeartbeat() {
+        stopAdminHeartbeat();
+        adminHeartbeatTimer = setInterval(sendAdminHeartbeat, ADMIN_HEARTBEAT_MS);
+    }
+
+    function stopAdminHeartbeat() {
+        if (adminHeartbeatTimer) clearInterval(adminHeartbeatTimer);
+        adminHeartbeatTimer = null;
+    }
+
+    async function sendAdminHeartbeat() {
+        if (!adminLockHeld || !adminSessionId || !isGasConfigured()) return;
+        try {
+            const data = await adminLockRequest('heartbeat', { sessionId: adminSessionId }, 10000);
+            adminHeartbeatFails = 0;
+            setAdminLockUi('held', data);
+        } catch (err) {
+            const data = err && err.data ? err.data : {};
+            if (data.code === 'LOCK_LOST' || data.code === 'LOCK_EXPIRED' || data.code === 'LOCK_NOT_FOUND') {
+                adminLockHeld = false;
+                stopAdminHeartbeat();
+                setAdminLockUi('lost', data);
+                showToast(data.error || 'Lock หลุด — แอดมินคนอื่นยึดแล้ว');
+                return;
+            }
+            adminHeartbeatFails++;
+            if (adminHeartbeatFails >= 2) {
+                adminLockHeld = false;
+                stopAdminHeartbeat();
+                setAdminLockUi('offline', data);
+                showToast('การเชื่อมต่อหลุด — กรุณาบันทึกและออก');
+            }
+        }
+    }
+
+    async function releaseAdminLock(useBeacon) {
+        if (!adminSessionId || !adminLockHeld || !isGasConfigured()) return;
+        const sid = adminSessionId;
+        adminLockHeld = false;
+        stopAdminHeartbeat();
+        if (useBeacon && navigator.sendBeacon) {
+            const body = JSON.stringify({ action: 'releaseLock', key: GAS_SECRET_KEY, sessionId: sid });
+            navigator.sendBeacon(GAS_ENDPOINT, new Blob([body], { type: 'text/plain;charset=utf-8' }));
+            return;
+        }
+        try { await adminLockRequest('releaseLock', { sessionId: sid }, 8000); } catch (e) { console.warn('[releaseAdminLock]', e); }
+    }
+
+    async function forceAdminLock() {
+        if (!confirm('ต้องการบังคับยึด Lock จากแอดมินคนอื่นหรือไม่?')) return;
+        await acquireAdminLock(true);
+    }
+
+    async function openAdmin() {
         adminDirty = false; // เริ่มจาก clean เพราะเพิ่งเปิด — ยังไม่ได้แก้อะไร
+        adminLockHeld = false;
+        setAdminLockUi('checking');
         renderColorSwatches(); renderAdminCategories(); syncSliders();
         $('adminModal').classList.add('open');
+        await acquireAdminLock(false);
     }
-    function closeAdmin() {
+    async function closeAdmin() {
         // ถ้ามีการแก้ไขที่ยังไม่บันทึก → ถามก่อน
         if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก ต้องการปิดหรือไม่?')) return;
         $('adminModal').classList.remove('open');
         adminDirty = false; // ปิดแล้วก็ reset (กันค้าง state ข้ามรอบ)
+        await releaseAdminLock(false);
+        setAdminLockUi('idle');
     }
 
     function renderColorSwatches() {
@@ -2884,6 +3056,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
     async function saveAdmin() {
         const btn = $('saveAdminBtn');
+        if (isGasConfigured() && !adminLockHeld) {
+            setAdminLockUi('lost');
+            showToast('ยังไม่มีสิทธิ์แก้ไข กรุณายึด Lock ก่อนบันทึก');
+            return;
+        }
         btn.disabled = true; btn.classList.add('saving');
         setSaveBtnState(btn, 'loading', 'กำลังจัดการไฟล์รูปภาพ...', true);
 
@@ -2954,8 +3131,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 // [แก้ข้อ 1] ส่ง array ตรงๆ คู่ขนาน — ให้ Apps Script เขียนเป็นแถวๆ ใน sheet "Banks" / "QRs"
                 banksList: bankData,
                 qrsList: qrData,
+                sessionId: adminSessionId,
             };
             await enqueue('saveAll', payload);
+            stopAdminHeartbeat();
+            adminLockHeld = false;
             btn.classList.remove('saving'); btn.classList.add('success');
             setSaveBtnState(btn, 'check', 'บันทึกสำเร็จ');
             showToast('บันทึกขึ้น Sheet เรียบร้อย');
@@ -2968,11 +3148,19 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         } catch (err) {
             console.warn('[saveAdmin]', err);
             btn.classList.remove('saving'); btn.classList.add('error');
-            setSaveBtnState(btn, 'close', 'บันทึกไม่สำเร็จ');
-            showToast('บันทึกไม่สำเร็จ — ดู console');
+            const code = err && err.data && err.data.code ? String(err.data.code) : '';
+            const isLockError = code.indexOf('LOCK_') === 0;
+            if (isLockError) {
+                adminLockHeld = false;
+                stopAdminHeartbeat();
+                setAdminLockUi(code === 'LOCK_BUSY' ? 'offline' : 'lost', err.data);
+            }
+            setSaveBtnState(btn, 'close', isLockError ? 'Lock หลุด' : 'บันทึกไม่สำเร็จ');
+            showToast(isLockError ? (err.data.error || 'Lock หลุด — กรุณายึดสิทธิ์ใหม่') : 'บันทึกไม่สำเร็จ — ดู console');
             setTimeout(() => {
                 btn.disabled = false; btn.classList.remove('error');
                 setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
+                setAdminLockUi(isLockError ? 'lost' : (adminLockHeld ? 'held' : 'idle'), err && err.data);
             }, 2000);
         }
     }
@@ -3078,7 +3266,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         $('verifyAdminBtn').addEventListener('click', verifyAdmin);
         $('logoUploadInput').addEventListener('change', e => handleLogoUpload(e.target));
         $('saveAdminBtn').addEventListener('click', saveAdmin);
+        $('forceAdminLockBtn').addEventListener('click', forceAdminLock);
         $('saveTemplateDraftBtn').addEventListener('click', saveTemplateDraft);
+        window.addEventListener('beforeunload', () => releaseAdminLock(true));
 
         // [แก้ข้อ 4] ปุ่ม prev/next/close ของ promo ถูกลบออกแล้ว — auto-slide + auto-close
         
