@@ -17,6 +17,11 @@
     <meta name="application-name" content="SmartPetShop">
     <meta name="theme-color" content="#2563EB">
     <link rel="manifest" href="manifest.json">
+    <link rel="preload" as="image" href="LOGO.PNG">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap"></noscript>
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1102,8 +1107,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
   </defs>
 </svg>
 
-<!-- Longdo Map API v3 — ใส่ API Key ของคุณตรงนี้ -->
-<script src="https://api.longdo.com/map3/?key=32344a31ec7f657884db5a210abb2df4"></script>
+<!-- Longdo Map API v3 loads lazily when checkout opens. -->
 <script>
 (function() {
     'use strict';
@@ -1121,10 +1125,42 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
 
-    // 🗺️ Longdo Map API Key — แก้ที่นี่จุดเดียว (ต้อง sync กับ <script src> ใน head/body ด้วย)
+    // 🗺️ Longdo Map API Key — ใช้กับ lazy loader ด้านล่าง
     const LONGDO_MAP_KEY = '32344a31ec7f657884db5a210abb2df4';
     const LONGDO_DEFAULT_LAT = 17.49428;
     const LONGDO_DEFAULT_LON = 101.71323;
+    let longdoMapApiPromise = null;
+
+    function loadLongdoMapApi() {
+        if (typeof longdo !== 'undefined') return Promise.resolve();
+        if (longdoMapApiPromise) return longdoMapApiPromise;
+
+        longdoMapApiPromise = new Promise((resolve, reject) => {
+            const existing = document.getElementById('longdoMapScript');
+            const done = () => {
+                if (typeof longdo !== 'undefined') resolve();
+                else reject(new Error('Longdo Map API loaded but unavailable'));
+            };
+            const fail = () => {
+                const failedScript = document.getElementById('longdoMapScript');
+                if (failedScript) failedScript.remove();
+                longdoMapApiPromise = null;
+                reject(new Error('Cannot load Longdo Map API'));
+            };
+
+            if (existing) existing.remove();
+
+            const script = document.createElement('script');
+            script.id = 'longdoMapScript';
+            script.src = `https://api.longdo.com/map3/?key=${encodeURIComponent(LONGDO_MAP_KEY)}`;
+            script.defer = true;
+            script.onload = done;
+            script.onerror = fail;
+            document.head.appendChild(script);
+        });
+
+        return longdoMapApiPromise;
+    }
 
     /* ============================================================
        ICON HELPER — สร้าง <svg> string จาก symbol id ใน sprite
@@ -1769,16 +1805,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
 
     function initMap() {
-        if (map) return; // แผนที่สร้างแล้ว ไม่ต้องทำซ้ำ
+        if (map) return Promise.resolve(); // แผนที่สร้างแล้ว ไม่ต้องทำซ้ำ
         if (typeof longdo === 'undefined') {
-            // Longdo ยังโหลดไม่เสร็จ → retry ทุก 300ms สูงสุด 15 ครั้ง (4.5วิ)
-            let retries = 0;
-            const retryTimer = setInterval(() => {
-                retries++;
-                if (typeof longdo !== 'undefined') { clearInterval(retryTimer); initMap(); }
-                else if (retries >= 15) { clearInterval(retryTimer); console.warn('[initMap] Longdo ไม่โหลดหลัง 4.5s'); }
-            }, 300);
-            return;
+            return loadLongdoMapApi()
+                .then(() => initMap())
+                .catch(err => {
+                    console.warn('[initMap] Longdo โหลดไม่สำเร็จ', err);
+                    showToast('โหลดแผนที่ไม่สำเร็จ — ลองเปิด checkout อีกครั้ง');
+                });
         }
 
         // สร้างแผนที่ที่พิกัดเริ่มต้น (จังหวัดเลย)
@@ -1817,6 +1851,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         // ปุ่ม currentLocationBtn และ confirmPinBtn ถูก bind ใน bindMapButtons() ต่างหาก
         // (bind ตอน DOM ready → ทำงานได้แม้ Longdo ยังไม่โหลดตอน initMap รอบแรก)
 
+        return Promise.resolve();
     }
 
     /* ---- render bank list in checkout (selectable + copy) ---- */
@@ -2269,7 +2304,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         
         renderBanks();
         renderQrList();
-        setTimeout(() => { initMap(); if (map && typeof map.resize === 'function') map.resize(); }, 300); 
+        setTimeout(() => {
+            initMap().then(() => {
+                if (map && typeof map.resize === 'function') map.resize();
+            });
+        }, 300); 
         const total = checkedItems.reduce((s, i) => s + i.price * i.qty, 0);
         const qrAmtEl = $('qrAmountDisplay'); if (qrAmtEl) qrAmtEl.textContent = '฿' + total.toLocaleString();
     }
