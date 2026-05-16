@@ -1136,7 +1136,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const SEARCH_DEBOUNCE_MS = 200;
 
     // ⚠️ ใส่ URL ของ GAS Web App ที่ Deploy แล้วตรงนี้
-    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxMr9luWJtIGILO2L5B6lD3VrxFuf6gLNagfJapeqvhCcQ6mMN4JaOnan_edzZZlMCM/exec';
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzhdt6CD9iVgH-t9phBo7uUuzCL5LGcU27UZvr4ySq2jlhZeYfAJjb_Yn26DoHpHvf_/exec';
 
     // 🔑 SECRET_KEY
     const GAS_SECRET_KEY = 'sgYdqjJi4fnS3tMWiD3DCpZpdkEvHDlAAdj7RoHr';
@@ -1146,6 +1146,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     const LONGDO_DEFAULT_LAT = 17.49428;
     const LONGDO_DEFAULT_LON = 101.71323;
     const ADMIN_HEARTBEAT_MS = 30000;
+    const ADMIN_AUTOSAVE_MS = 15000;
+    const ADMIN_LOCAL_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     let longdoMapApiPromise = null;
 
     function loadLongdoMapApi() {
@@ -1351,6 +1353,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let adminLockHeld = false;
     let adminHeartbeatTimer = null;
     let adminHeartbeatFails = 0;
+    let adminResourceLocks = new Map();
+    let adminLastBlockedResource = null;
+    let adminBaselineSnapshot = null;
+    let adminAutosaveTimer = null;
+    let adminDraftSaveTimer = null;
 
     /* layout settings */
     let layoutMob = { radius: 18, innerRadius: 14, shadow: 10, padding: 10, imgHeight: 140, cols: 2, gap: 12 };
@@ -2525,8 +2532,223 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     /* ============================================================
        ADMIN PANEL
        ============================================================ */
-    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — เรียกเมื่อใดก็ตามที่ data ใน admin เปลี่ยน
-    function markAdminDirty() { adminDirty = true; }
+    function cloneAdminData(value) {
+        return JSON.parse(JSON.stringify(value || null));
+    }
+
+    function stableAdminJson(value) {
+        if (value === null || typeof value !== 'object') return JSON.stringify(value);
+        if (Array.isArray(value)) return '[' + value.map(stableAdminJson).join(',') + ']';
+        return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableAdminJson(value[k])).join(',') + '}';
+    }
+
+    function makeAdminSnapshot() {
+        return {
+            products: cloneAdminData(products) || [],
+            categories: cloneAdminData(categories) || [],
+            settings: cloneAdminData(collectSettings()) || {},
+            banksList: cloneAdminData(bankData) || [],
+            qrsList: cloneAdminData(qrData) || [],
+            savedAt: Date.now()
+        };
+    }
+
+    function applyAdminSnapshot(snapshot) {
+        if (!snapshot) return;
+        if (Array.isArray(snapshot.categories)) categories = cloneAdminData(snapshot.categories) || [];
+        if (Array.isArray(snapshot.products)) products = cloneAdminData(snapshot.products) || [];
+        if (snapshot.settings) applyLoadedSettings(snapshot.settings);
+        if (Array.isArray(snapshot.banksList)) { bankData = cloneAdminData(snapshot.banksList) || bankData; renderAdminBanks(); }
+        if (Array.isArray(snapshot.qrsList)) { qrData = cloneAdminData(snapshot.qrsList) || qrData; renderAdminQrs(); }
+        filteredProducts = products.slice();
+        renderCatalog(); renderNav(); renderColorSwatches(); renderAdminCategories(); syncSliders();
+    }
+
+    function buildAdminPatch() {
+        const base = adminBaselineSnapshot || { products: [], categories: [], settings: {}, banksList: [], qrsList: [] };
+        const patch = {
+            products: { upsert: [], delete: [] },
+            categories: { upsert: [], delete: [] }
+        };
+
+        const baseProducts = new Map((base.products || []).map(p => [String(p.id), p]));
+        const currentProducts = new Map(products.map(p => [String(p.id), p]));
+        products.forEach(p => {
+            const before = baseProducts.get(String(p.id));
+            if (!before || stableAdminJson(before) !== stableAdminJson(p)) patch.products.upsert.push(cloneAdminData(p));
+        });
+        (base.products || []).forEach(p => {
+            if (!currentProducts.has(String(p.id))) patch.products.delete.push(p.id);
+        });
+
+        const baseCategories = new Map((base.categories || []).map(c => [String(c.id), c]));
+        const currentCategories = new Map(categories.map(c => [String(c.id), c]));
+        categories.forEach(c => {
+            const before = baseCategories.get(String(c.id));
+            if (!before || stableAdminJson(before) !== stableAdminJson(c)) patch.categories.upsert.push(cloneAdminData(c));
+        });
+        (base.categories || []).forEach(c => {
+            if (!currentCategories.has(String(c.id))) patch.categories.delete.push(c.id);
+        });
+
+        const settings = collectSettings();
+        if (stableAdminJson(settings) !== stableAdminJson(base.settings || {}) ||
+            stableAdminJson(bankData) !== stableAdminJson(base.banksList || []) ||
+            stableAdminJson(qrData) !== stableAdminJson(base.qrsList || [])) {
+            patch.settings = cloneAdminData(settings) || {};
+            patch.banksList = cloneAdminData(bankData) || [];
+            patch.qrsList = cloneAdminData(qrData) || [];
+        }
+
+        if (!patch.products.upsert.length && !patch.products.delete.length) delete patch.products;
+        if (!patch.categories.upsert.length && !patch.categories.delete.length) delete patch.categories;
+        return patch;
+    }
+
+    function hasAdminPatchChanges(patch) {
+        return !!(patch && (
+            (patch.products && ((patch.products.upsert || []).length || (patch.products.delete || []).length)) ||
+            (patch.categories && ((patch.categories.upsert || []).length || (patch.categories.delete || []).length)) ||
+            patch.settings
+        ));
+    }
+
+    function applyAdminPatchLocally(patch) {
+        if (!patch) return;
+        if (patch.categories) {
+            const del = new Set((patch.categories.delete || []).map(String));
+            categories = categories.filter(c => !del.has(String(c.id)));
+            (patch.categories.upsert || []).forEach(next => {
+                const idx = categories.findIndex(c => String(c.id) === String(next.id));
+                if (idx >= 0) categories[idx] = cloneAdminData(next);
+                else categories.push(cloneAdminData(next));
+            });
+        }
+        if (patch.products) {
+            const del = new Set((patch.products.delete || []).map(String));
+            products = products.filter(p => !del.has(String(p.id)));
+            (patch.products.upsert || []).forEach(next => {
+                const idx = products.findIndex(p => String(p.id) === String(next.id));
+                if (idx >= 0) products[idx] = cloneAdminData(next);
+                else products.push(cloneAdminData(next));
+            });
+        }
+        if (patch.settings) applyLoadedSettings(patch.settings);
+        filteredProducts = products.slice();
+        renderCatalog(); renderNav(); renderAdminCategories(); syncSliders();
+    }
+
+    function adminDraftStorageKey() {
+        return 'loeiAdminDraft:' + (adminName || 'Admin');
+    }
+
+    function saveAdminLocalDraft() {
+        if (!adminDirty) return;
+        try {
+            localStorage.setItem(adminDraftStorageKey(), JSON.stringify({
+                adminName,
+                updatedAt: Date.now(),
+                snapshot: makeAdminSnapshot()
+            }));
+        } catch (e) {
+            console.warn('[admin local draft]', e);
+        }
+    }
+
+    function clearAdminLocalDraft() {
+        try { localStorage.removeItem(adminDraftStorageKey()); } catch (e) {}
+    }
+
+    function scheduleAdminAutosave() {
+        saveAdminLocalDraft();
+        if (adminDraftSaveTimer) clearTimeout(adminDraftSaveTimer);
+        adminDraftSaveTimer = setTimeout(flushAdminServerDraft, 1200);
+    }
+
+    function startAdminAutosave() {
+        stopAdminAutosave();
+        adminAutosaveTimer = setInterval(flushAdminServerDraft, ADMIN_AUTOSAVE_MS);
+    }
+
+    function stopAdminAutosave() {
+        if (adminAutosaveTimer) clearInterval(adminAutosaveTimer);
+        if (adminDraftSaveTimer) clearTimeout(adminDraftSaveTimer);
+        adminAutosaveTimer = null;
+        adminDraftSaveTimer = null;
+    }
+
+    async function flushAdminServerDraft() {
+        if (!adminDirty || !isGasConfigured() || !adminSessionId || !adminLockHeld) return;
+        const patch = buildAdminPatch();
+        if (!hasAdminPatchChanges(patch)) return;
+        try {
+            await adminLockRequest('saveAdminDraft', {
+                sessionId: adminSessionId,
+                adminName,
+                draft: { updatedAt: Date.now(), patch }
+            }, 12000);
+        } catch (e) {
+            console.warn('[admin server draft]', e);
+        }
+    }
+
+    async function maybeRestoreAdminDraft() {
+        let restored = false;
+        try {
+            const raw = localStorage.getItem(adminDraftStorageKey());
+            if (raw) {
+                const draft = JSON.parse(raw);
+                if (draft && draft.snapshot && Date.now() - (draft.updatedAt || 0) <= ADMIN_LOCAL_DRAFT_TTL_MS) {
+                    if (confirm('พบ draft ที่ autosave ไว้ ต้องการกู้คืนหรือไม่?')) {
+                        applyAdminSnapshot(draft.snapshot);
+                        adminDirty = true;
+                        restored = true;
+                        showToast('กู้คืน draft แล้ว');
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[restore local draft]', e);
+        }
+
+        if (!restored && isGasConfigured() && adminSessionId) {
+            try {
+                const data = await adminLockRequest('getAdminDraft', { sessionId: adminSessionId, adminName }, 12000);
+                if (data && data.draft && data.draft.patch && confirm('พบ draft จากระบบ ต้องการกู้คืนหรือไม่?')) {
+                    applyAdminPatchLocally(data.draft.patch);
+                    adminDirty = true;
+                    restored = true;
+                    showToast('กู้คืน draft จากระบบแล้ว');
+                }
+            } catch (e) {
+                console.warn('[restore server draft]', e);
+            }
+        }
+        if (restored) scheduleAdminAutosave();
+    }
+
+    function getAdminResourceFromTarget(target) {
+        if (!target || !target.closest || !target.closest('#adminModal')) return null;
+        const action = target.dataset ? target.dataset.action : '';
+        if (target.dataset && target.dataset.pid) return { type: 'product', id: target.dataset.pid };
+        if (target.dataset && target.dataset.catId && action !== 'selectAdminCat') return { type: 'category', id: target.dataset.catId };
+        if (!target.closest('#adminCategoryList')) return { type: 'settings', id: 'global' };
+        return null;
+    }
+
+    function getAdminResourceFromDirtyArg(arg) {
+        if (arg && arg.type && arg.id) return arg;
+        if (arg && arg.target) return getAdminResourceFromTarget(arg.target);
+        return null;
+    }
+
+    // mark ว่า admin มีการแก้ไขที่ยังไม่บันทึก — autosave draft และพยายาม Lock เฉพาะรายการที่แตะ
+    function markAdminDirty(arg) {
+        adminDirty = true;
+        const resource = getAdminResourceFromDirtyArg(arg);
+        if (resource) touchAdminResource(resource.type, resource.id);
+        scheduleAdminAutosave();
+    }
 
     function ensureAdminSession() {
         adminSessionId = sessionStorage.getItem('loeiAdminSessionId') || '';
@@ -2570,18 +2792,95 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         });
     }
 
+    function adminResourceKey(type, id) {
+        return String(type || '') + ':' + String(id || '');
+    }
+
+    function getAdminResourcesFromPatch(patch) {
+        const resources = [];
+        const seen = new Set();
+        const add = (type, id) => {
+            if (!type || !id) return;
+            const key = adminResourceKey(type, id);
+            if (!seen.has(key)) {
+                seen.add(key);
+                resources.push({ type, id: String(id) });
+            }
+        };
+        if (patch && patch.products) {
+            (patch.products.upsert || []).forEach(p => add('product', p && p.id));
+            (patch.products.delete || []).forEach(id => add('product', id));
+        }
+        if (patch && patch.categories) {
+            (patch.categories.upsert || []).forEach(c => add('category', c && c.id));
+            (patch.categories.delete || []).forEach(id => add('category', id));
+        }
+        if (patch && patch.settings) add('settings', 'global');
+        return resources;
+    }
+
+    function touchAdminResource(type, id) {
+        if (!type || !id) return;
+        ensureAdminResourceLock(type, id, false);
+    }
+
+    async function ensureAdminResourceLock(type, id, force) {
+        if (!type || !id) return false;
+        const key = adminResourceKey(type, id);
+        if (adminResourceLocks.has(key) && !force) return true;
+        if (!isGasConfigured()) {
+            adminResourceLocks.set(key, { type, id, lockedBy: 'โหมดทดลอง' });
+            return true;
+        }
+        ensureAdminSession();
+        if (!adminLockHeld) {
+            setAdminLockUi('lost');
+            return false;
+        }
+        try {
+            const data = await adminLockRequest(force ? 'forceAcquireResourceLock' : 'acquireResourceLock', {
+                sessionId: adminSessionId,
+                adminName,
+                resourceType: type,
+                resourceId: id
+            }, 12000);
+            adminResourceLocks.set(key, data);
+            adminLastBlockedResource = null;
+            setAdminLockUi('held', data);
+            if (force) showToast('บังคับยึดรายการนี้สำเร็จ');
+            return true;
+        } catch (err) {
+            const data = err && err.data ? err.data : {};
+            adminLastBlockedResource = { type, id };
+            setAdminLockUi(data.code === 'RESOURCE_LOCKED' ? 'blocked' : 'offline', data);
+            showToast(data.error || 'ยังไม่ได้สิทธิ์แก้ไขรายการนี้');
+            return false;
+        }
+    }
+
+    async function ensureAdminLocksForPatch(patch) {
+        const resources = getAdminResourcesFromPatch(patch);
+        for (const resource of resources) {
+            const ok = await ensureAdminResourceLock(resource.type, resource.id, false);
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     function setAdminLockUi(state, data) {
         const bar = $('adminLockBar'), text = $('adminLockText'), forceBtn = $('forceAdminLockBtn'), saveBtn = $('saveAdminBtn');
         if (!bar || !text) return;
         bar.className = 'admin-lock-bar ' + state;
         const holder = data && data.lockedBy ? data.lockedBy : 'แอดมินคนอื่น';
-        if (state === 'held') text.textContent = 'ล็อกการแก้ไขแล้ว: ' + (adminName || holder);
+        const activeText = data && data.activeCount ? ` (${data.activeCount}/${data.maxActive || 3})` : '';
+        if (state === 'held') text.textContent = 'พร้อมแก้ไขหลายคน: ' + (adminName || holder) + activeText;
         else if (state === 'checking') text.textContent = 'กำลังตรวจสอบสิทธิ์แก้ไข...';
-        else if (state === 'blocked') text.textContent = 'มีคนกำลังแก้ไขอยู่: ' + holder;
-        else if (state === 'lost') text.textContent = 'Lock หลุด — แอดมินคนอื่นยึดแล้ว';
+        else if (state === 'blocked' && data && data.code === 'ADMIN_LIMIT_REACHED') text.textContent = data.error || 'มีแอดมินใช้งานครบแล้ว';
+        else if (state === 'blocked') text.textContent = 'รายการนี้กำลังถูกแก้โดย: ' + holder;
+        else if (state === 'lost') text.textContent = 'Session/Lock หลุด — กรุณาเข้าแอดมินใหม่';
         else if (state === 'offline') text.textContent = 'การเชื่อมต่อหลุด — กรุณาบันทึกและออก';
-        else text.textContent = 'ยังไม่ได้ล็อกสิทธิ์แก้ไข';
-        if (forceBtn) forceBtn.style.display = (state === 'blocked' || state === 'lost' || state === 'offline') ? '' : 'none';
+        else text.textContent = 'ยังไม่ได้เข้า session แอดมิน';
+        if (forceBtn) forceBtn.style.display = (state === 'blocked' && adminLastBlockedResource) ? '' : 'none';
         if (saveBtn && !saveBtn.classList.contains('saving')) saveBtn.disabled = isGasConfigured() && !adminLockHeld;
     }
 
@@ -2594,22 +2893,26 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         ensureAdminSession();
         setAdminLockUi('checking');
         try {
-            const data = await adminLockRequest(force ? 'forceAcquireLock' : 'acquireLock', {
+            const data = await adminLockRequest('startAdminSession', {
                 sessionId: adminSessionId,
-                adminName
+                adminName,
+                deviceInfo: navigator.userAgent || ''
             }, 12000);
             adminLockHeld = true;
+            adminResourceLocks.clear();
             adminHeartbeatFails = 0;
             setAdminLockUi('held', data);
             startAdminHeartbeat();
-            showToast(force ? 'บังคับยึด Lock สำเร็จ' : 'ได้สิทธิ์แก้ไขแล้ว');
+            startAdminAutosave();
+            showToast('เข้าแอดมินพร้อมแก้ไขแล้ว');
             return true;
         } catch (err) {
             adminLockHeld = false;
             stopAdminHeartbeat();
+            stopAdminAutosave();
             const data = err && err.data ? err.data : {};
-            setAdminLockUi(data.code === 'LOCKED' ? 'blocked' : 'offline', data);
-            showToast(data.error || 'ยังไม่ได้สิทธิ์แก้ไข');
+            setAdminLockUi(data.code === 'ADMIN_LIMIT_REACHED' ? 'blocked' : 'offline', data);
+            showToast(data.error || 'เข้าแอดมินไม่สำเร็จ');
             return false;
         }
     }
@@ -2627,22 +2930,24 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     async function sendAdminHeartbeat() {
         if (!adminLockHeld || !adminSessionId || !isGasConfigured()) return;
         try {
-            const data = await adminLockRequest('heartbeat', { sessionId: adminSessionId }, 10000);
+            const data = await adminLockRequest('adminSessionHeartbeat', { sessionId: adminSessionId }, 10000);
             adminHeartbeatFails = 0;
             setAdminLockUi('held', data);
         } catch (err) {
             const data = err && err.data ? err.data : {};
-            if (data.code === 'LOCK_LOST' || data.code === 'LOCK_EXPIRED' || data.code === 'LOCK_NOT_FOUND') {
+            if (data.code === 'SESSION_EXPIRED' || data.code === 'SESSION_NOT_FOUND') {
                 adminLockHeld = false;
                 stopAdminHeartbeat();
+                stopAdminAutosave();
                 setAdminLockUi('lost', data);
-                showToast(data.error || 'Lock หลุด — แอดมินคนอื่นยึดแล้ว');
+                showToast(data.error || 'Session แอดมินหมดอายุ');
                 return;
             }
             adminHeartbeatFails++;
             if (adminHeartbeatFails >= 2) {
                 adminLockHeld = false;
                 stopAdminHeartbeat();
+                stopAdminAutosave();
                 setAdminLockUi('offline', data);
                 showToast('การเชื่อมต่อหลุด — กรุณาบันทึกและออก');
             }
@@ -2653,31 +2958,38 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (!adminSessionId || !adminLockHeld || !isGasConfigured()) return;
         const sid = adminSessionId;
         adminLockHeld = false;
+        adminResourceLocks.clear();
         stopAdminHeartbeat();
+        stopAdminAutosave();
         if (useBeacon && navigator.sendBeacon) {
-            const body = JSON.stringify({ action: 'releaseLock', key: GAS_SECRET_KEY, sessionId: sid });
+            const body = JSON.stringify({ action: 'endAdminSession', key: GAS_SECRET_KEY, sessionId: sid });
             navigator.sendBeacon(GAS_ENDPOINT, new Blob([body], { type: 'text/plain;charset=utf-8' }));
             return;
         }
-        try { await adminLockRequest('releaseLock', { sessionId: sid }, 8000); } catch (e) { console.warn('[releaseAdminLock]', e); }
+        try { await adminLockRequest('endAdminSession', { sessionId: sid }, 8000); } catch (e) { console.warn('[releaseAdminLock]', e); }
     }
 
     async function forceAdminLock() {
-        if (!confirm('ต้องการบังคับยึด Lock จากแอดมินคนอื่นหรือไม่?')) return;
-        await acquireAdminLock(true);
+        if (!adminLastBlockedResource) return;
+        if (!confirm('ต้องการบังคับยึดรายการนี้จากแอดมินคนอื่นหรือไม่?')) return;
+        await ensureAdminResourceLock(adminLastBlockedResource.type, adminLastBlockedResource.id, true);
     }
 
     async function openAdmin() {
         adminDirty = false; // เริ่มจาก clean เพราะเพิ่งเปิด — ยังไม่ได้แก้อะไร
         adminLockHeld = false;
+        adminResourceLocks.clear();
+        adminLastBlockedResource = null;
+        adminBaselineSnapshot = makeAdminSnapshot();
         setAdminLockUi('checking');
         renderColorSwatches(); renderAdminCategories(); syncSliders();
         $('adminModal').classList.add('open');
-        await acquireAdminLock(false);
+        const ok = await acquireAdminLock(false);
+        if (ok) await maybeRestoreAdminDraft();
     }
     async function closeAdmin() {
         // ถ้ามีการแก้ไขที่ยังไม่บันทึก → ถามก่อน
-        if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก ต้องการปิดหรือไม่?')) return;
+        if (adminDirty && !confirm('มีการแก้ไขที่ยังไม่บันทึก แต่ระบบ autosave draft ไว้แล้ว ต้องการปิดหรือไม่?')) return;
         $('adminModal').classList.remove('open');
         adminDirty = false; // ปิดแล้วก็ reset (กันค้าง state ข้ามรอบ)
         await releaseAdminLock(false);
@@ -2856,6 +3168,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     function deleteCategory(catId) {
         if(!confirm('ยืนยันการลบหมวดหมู่นี้ พร้อมสินค้าข้างในทั้งหมด?')) return;
         const idx = categories.findIndex(c => c.id === catId);
+        const removedProductIds = products.filter(p => p.catId === catId).map(p => p.id);
         categories = categories.filter(c => c.id !== catId);
         products = products.filter(p => p.catId !== catId);
         // ถ้าลบหมวดที่กำลังดูอยู่ → เลือกหมวดถัดไป (หรือก่อนหน้าถ้าเป็นตัวสุดท้าย)
@@ -2863,7 +3176,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             activeAdminCatId = categories[idx] ? categories[idx].id : (categories[idx - 1] ? categories[idx - 1].id : (categories[0] ? categories[0].id : null));
         }
         renderAdminCategories();
-        renderNav(); markAdminDirty(); showToast('ลบหมวดหมู่แล้ว');
+        renderNav();
+        markAdminDirty({ type: 'category', id: catId });
+        removedProductIds.forEach(id => touchAdminResource('product', id));
+        showToast('ลบหมวดหมู่แล้ว');
     }
 
     function buildAdminCard(p) {
@@ -2916,7 +3232,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         '</div>';
     }
 
-    function updateField(pid, field, value) { const p = products.find(x => x.id === pid); if (p) p[field] = value; }
+    function updateField(pid, field, value) { const p = products.find(x => x.id === pid); if (p) { p[field] = value; markAdminDirty({ type: 'product', id: pid }); } }
     function updateImgUrl(pid, url) {
         const p = products.find(x => x.id === pid); if (!p) return;
         const converted = convertDriveUrl(url.trim()); p.image = converted;
@@ -2924,15 +3240,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         if (converted) { prev.src = converted; prev.style.display = ''; noImg.style.display = 'none'; }
         else { prev.src = ''; prev.style.display = 'none'; noImg.style.display = 'flex'; }
         if (converted !== url.trim() && converted) { const urlInput = document.querySelector(`#admin-prod-${pid} input[placeholder*="URL"]`); if (urlInput) urlInput.value = converted; }
+        markAdminDirty({ type: 'product', id: pid });
     }
     async function handleImgUpload(input, pid) {
         const file = input.files[0]; if (!file) return;
         const p = products.find(x => x.id === pid); if (!p) return;
+        touchAdminResource('product', pid);
         const dataUrl = await fileToBase64(file);
         const prev = $('imgprev-' + pid), noImg = $('imgno-' + pid);
         prev.src = dataUrl; prev.style.display = ''; noImg.style.display = 'none';
 
-        if (!isGasConfigured()) { p.image = dataUrl; showToast('โหลดรูปแล้ว (โหมดทดลอง)'); return; }
+        if (!isGasConfigured()) { p.image = dataUrl; markAdminDirty({ type: 'product', id: pid }); showToast('โหลดรูปแล้ว (โหมดทดลอง)'); return; }
 
         const label = $('uplabel-' + pid);
         if (label) { label.classList.add('uploading'); label.innerHTML = iconHTML('loading','ic-spin') + ' กำลังอัปโหลด...'; }
@@ -2942,33 +3260,37 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 p.image = result.url; prev.src = result.url;
                 const urlInput = document.querySelector(`#admin-prod-${pid} input[placeholder*="URL"]`);
                 if (urlInput) urlInput.value = result.url;
+                markAdminDirty({ type: 'product', id: pid });
                 showToast('อัปโหลดรูปสำเร็จ');
             }
-        } catch (err) { console.warn('[uploadImage]', err); showToast('อัปโหลดไม่สำเร็จ'); p.image = dataUrl; } 
+        } catch (err) { console.warn('[uploadImage]', err); showToast('อัปโหลดไม่สำเร็จ'); p.image = dataUrl; markAdminDirty({ type: 'product', id: pid }); } 
         finally { if (label) { label.classList.remove('uploading'); label.innerHTML = iconHTML('camera') + ' เลือกรูป<input type="file" accept="image/*" data-action="handleImgUpload" data-pid="' + esc(pid) + '">'; } }
     }
-    function updateSizeLabel(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) p.sizes[idx].label = val; }
-    function updateSizePrice(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) p.sizes[idx].price = parseInt(val, 10) || 0; }
+    function updateSizeLabel(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) { p.sizes[idx].label = val; markAdminDirty({ type: 'product', id: pid }); } }
+    function updateSizePrice(pid, idx, val) { const p = products.find(x => x.id === pid); if (p && p.sizes[idx]) { p.sizes[idx].price = parseInt(val, 10) || 0; markAdminDirty({ type: 'product', id: pid }); } }
     function removeSize(pid, idx) {
         const p = products.find(x => x.id === pid); if (!p) return;
         if (p.sizes.length <= 1) { if (confirm('สินค้านี้จะไม่มี Size เหลือ — ต้องการลบสินค้านี้ทิ้งด้วยหรือไม่?')) { deleteProduct(pid); } return; }
-        p.sizes.splice(idx, 1); refreshSizes(p); markAdminDirty();
+        p.sizes.splice(idx, 1); refreshSizes(p); markAdminDirty({ type: 'product', id: pid });
     }
-    function addSize(pid) { const p = products.find(x => x.id === pid); if (!p) return; p.sizes.push({ label: '', price: 0 }); refreshSizes(p); markAdminDirty(); }
+    function addSize(pid) { const p = products.find(x => x.id === pid); if (!p) return; p.sizes.push({ label: '', price: 0 }); refreshSizes(p); markAdminDirty({ type: 'product', id: pid }); }
     function refreshSizes(p) { const el = $('sizes-' + p.id); if (!el) return; el.innerHTML = p.sizes.map((s, i) => buildAdminSizeRow(p.id, i, s)).join(''); }
     function toggleStock(pid) {
         const p = products.find(x => x.id === pid); if (!p) return; p.inStock = !p.inStock;
         const btn = $('stockbtn-' + pid); if (!btn) return;
         btn.className = 'admin-stock-btn ' + (p.inStock ? 'instock' : 'outstock');
         btn.innerHTML = iconHTML(p.inStock ? 'check' : 'close') + ' ' + (p.inStock ? 'มีสินค้า' : 'สินค้าหมด');
-        markAdminDirty();
+        markAdminDirty({ type: 'product', id: pid });
     }
     function addProduct(catId) {
         const newId = 'p' + Date.now();
         const prod = { id: newId, catId, name: 'สินค้าใหม่', detail: '', sizes: [{ label: '200ml', price: 0 }], inStock: true, image: '' };
         products.push(prod);
         const prodsEl = $('admin-prods-' + catId); if (prodsEl) prodsEl.appendChild(buildAdminCard(prod));
-        updateCatCount(catId); markAdminDirty(); showToast('เพิ่มสินค้าแล้ว');
+        updateCatCount(catId);
+        markAdminDirty({ type: 'product', id: newId });
+        touchAdminResource('category', catId);
+        showToast('เพิ่มสินค้าแล้ว');
         const newCard = $('admin-prod-' + newId); if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function duplicateProduct(pid) {
@@ -2995,7 +3317,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             else prodsEl.appendChild(newCard);
         }
         updateCatCount(src.catId);
-        markAdminDirty();
+        markAdminDirty({ type: 'product', id: newId });
+        touchAdminResource('category', src.catId);
         showToast('ทำซ้ำสินค้าแล้ว — กรุณาเพิ่มรูปภาพ');
         const newCard = $('admin-prod-' + newId); if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -3004,7 +3327,10 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const p = products.find(x => x.id === pid); const catId = p ? p.catId : null;
         products = products.filter(x => x.id !== pid);
         const card = $('admin-prod-' + pid); if (card) card.remove();
-        if (catId) updateCatCount(catId); markAdminDirty(); showToast('ลบสินค้าแล้ว');
+        if (catId) updateCatCount(catId);
+        markAdminDirty({ type: 'product', id: pid });
+        if (catId) touchAdminResource('category', catId);
+        showToast('ลบสินค้าแล้ว');
     }
     function updateCatCount(catId) {
         const cnt = products.filter(p => p.catId === catId).length;
@@ -3017,6 +3343,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         const span = $('catname-' + catId); if (span) span.textContent = name;
         // อัพเดทชื่อใน sidebar tab ด้วย
         const tabName = $('catname-tab-' + catId); if (tabName) tabName.textContent = name;
+        markAdminDirty({ type: 'category', id: catId });
     }
 
     function addCategory() {
@@ -3026,14 +3353,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         activeAdminCatId = newId;
         renderAdminCategories();
         renderNav();
-        markAdminDirty();
+        markAdminDirty({ type: 'category', id: newId });
         // focus ที่ input ชื่อหมวดในฝั่ง content เพื่อให้แก้ชื่อต่อทันที
         const nameInput = document.querySelector(`#admin-block-${newId} input[data-action="updateCatName"]`);
         if (nameInput) { nameInput.focus(); nameInput.select(); }
         showToast('เพิ่มหมวดหมู่แล้ว');
     }
 
-    function updateStock(pid, val) { const p = products.find(x => x.id === pid); if (!p) return; p.stock = parseInt(val, 10) || 0; }
+    function updateStock(pid, val) { const p = products.find(x => x.id === pid); if (!p) return; p.stock = parseInt(val, 10) || 0; markAdminDirty({ type: 'product', id: pid }); }
     function adminStockStep(pid, delta) {
         const p = products.find(x => x.id === pid); if (!p) return;
         const cur = parseInt(p.stock, 10) || 0;
@@ -3041,7 +3368,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         p.stock = next;
         const input = document.querySelector(`.admin-stock-qty-input[data-pid="${pid}"]`);
         if (input) input.value = next;
-        markAdminDirty();
+        markAdminDirty({ type: 'product', id: pid });
     }
 
     /* ============================================================
@@ -3124,18 +3451,34 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             setSaveBtnState(btn, 'loading', 'กำลังบันทึกข้อมูล...', true);
             // --------------------------------------------------------------------
 
-            const payload = {
-                products,
-                categories,
-                settings: collectSettings(),
-                // [แก้ข้อ 1] ส่ง array ตรงๆ คู่ขนาน — ให้ Apps Script เขียนเป็นแถวๆ ใน sheet "Banks" / "QRs"
-                banksList: bankData,
-                qrsList: qrData,
-                sessionId: adminSessionId,
-            };
-            await enqueue('saveAll', payload);
-            stopAdminHeartbeat();
-            adminLockHeld = false;
+            const patch = buildAdminPatch();
+            if (!hasAdminPatchChanges(patch)) {
+                btn.classList.remove('saving'); btn.classList.add('success');
+                setSaveBtnState(btn, 'check', 'ไม่มีข้อมูลที่เปลี่ยน');
+                adminDirty = false;
+                clearAdminLocalDraft();
+                try { await adminLockRequest('clearAdminDraft', { sessionId: adminSessionId, adminName }, 8000); } catch (e) {}
+                stopAdminAutosave();
+                setTimeout(() => {
+                    btn.disabled = false; btn.classList.remove('success');
+                    setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
+                    closeAdmin();
+                }, 1200);
+                return;
+            }
+
+            const locksOk = await ensureAdminLocksForPatch(patch);
+            if (!locksOk) {
+                const lockErr = new Error('RESOURCE_LOCKED');
+                lockErr.data = { code: 'RESOURCE_LOCKED', error: 'บางรายการถูกแอดมินคนอื่นแก้อยู่' };
+                throw lockErr;
+            }
+
+            await enqueue('saveAdminPatch', { patch, sessionId: adminSessionId, adminName });
+            clearAdminLocalDraft();
+            try { await adminLockRequest('clearAdminDraft', { sessionId: adminSessionId, adminName }, 8000); } catch (e) {}
+            adminBaselineSnapshot = makeAdminSnapshot();
+            stopAdminAutosave();
             btn.classList.remove('saving'); btn.classList.add('success');
             setSaveBtnState(btn, 'check', 'บันทึกสำเร็จ');
             showToast('บันทึกขึ้น Sheet เรียบร้อย');
@@ -3149,18 +3492,23 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             console.warn('[saveAdmin]', err);
             btn.classList.remove('saving'); btn.classList.add('error');
             const code = err && err.data && err.data.code ? String(err.data.code) : '';
-            const isLockError = code.indexOf('LOCK_') === 0;
-            if (isLockError) {
+            const isSessionError = code.indexOf('SESSION_') === 0 || code === 'LOCK_BUSY';
+            const isResourceError = code.indexOf('RESOURCE_') === 0;
+            const isLockError = isSessionError || isResourceError;
+            if (isSessionError) {
                 adminLockHeld = false;
                 stopAdminHeartbeat();
+                stopAdminAutosave();
                 setAdminLockUi(code === 'LOCK_BUSY' ? 'offline' : 'lost', err.data);
+            } else if (isResourceError) {
+                setAdminLockUi('blocked', err.data);
             }
-            setSaveBtnState(btn, 'close', isLockError ? 'Lock หลุด' : 'บันทึกไม่สำเร็จ');
-            showToast(isLockError ? (err.data.error || 'Lock หลุด — กรุณายึดสิทธิ์ใหม่') : 'บันทึกไม่สำเร็จ — ดู console');
+            setSaveBtnState(btn, 'close', isLockError ? 'ติด Lock' : 'บันทึกไม่สำเร็จ');
+            showToast(isLockError ? (err.data.error || 'รายการถูกล็อก — กรุณาลองใหม่') : 'บันทึกไม่สำเร็จ — ดู console');
             setTimeout(() => {
                 btn.disabled = false; btn.classList.remove('error');
                 setSaveBtnState(btn, 'save', 'บันทึกทั้งหมด');
-                setAdminLockUi(isLockError ? 'lost' : (adminLockHeld ? 'held' : 'idle'), err && err.data);
+                setAdminLockUi(isResourceError ? 'blocked' : (isSessionError ? 'lost' : (adminLockHeld ? 'held' : 'idle')), err && err.data);
             }, 2000);
         }
     }
