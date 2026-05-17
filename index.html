@@ -413,10 +413,23 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 .btn-delete-cat:hover { background: #dc2626; }
 .admin-cat-body { padding: 12px; display: none; }
 .admin-cat-body.open { display: block; }
-.admin-prod-card { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.admin-prod-card { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-bottom: 10px; position: relative; }
+.admin-prod-card.dragging { opacity: 0.55; border-style: dashed; box-shadow: 0 8px 24px rgba(15,23,42,0.12); }
 .admin-prod-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+.admin-prod-title-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.admin-prod-drag { width: 28px; height: 28px; border: none; border-radius: 8px; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: grab; flex-shrink: 0; color: #c7ccd4; }
+.admin-prod-drag:hover { background: #f3f4f6; color: #9ca3af; }
+.admin-prod-drag:active { cursor: grabbing; }
+.admin-drag-dots { display: grid; grid-template-columns: repeat(3, 4px); gap: 3px; align-items: center; justify-content: center; }
+.admin-drag-dots span { width: 4px; height: 4px; border-radius: 50%; background: currentColor; display: block; }
 .admin-prod-name-input { font-size: 15px; font-weight: bold; flex: 1; padding: 7px 11px; border: 1.5px solid #e5e7eb; border-radius: 8px; outline: none; font-family: inherit; }
 .admin-prod-name-input:focus { border-color: #6b7280; }
+.admin-prod-meta-row { display: grid; grid-template-columns: minmax(120px, 0.8fr) minmax(160px, 1fr); gap: 8px; margin: -2px 0 10px; }
+.admin-prod-meta-box { background: #fff; border: 1px solid #eef2f7; border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.admin-prod-meta-label { display: block; font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.35px; margin-bottom: 4px; }
+.admin-prod-id-text { display: block; font-size: 12px; color: #374151; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-prod-cat-select { width: 100%; padding: 6px 8px; border: 1.5px solid #e5e7eb; border-radius: 7px; background: #fff; font-size: 12px; font-family: inherit; outline: none; }
+.admin-prod-cat-select:focus { border-color: #6b7280; }
 .admin-field-row { margin-bottom: 10px; }
 .admin-field-label { font-size: 11px; font-weight: bold; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; display: block; }
 .admin-img-section { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
@@ -491,7 +504,7 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18p
 .admin-cat-readonly-overlay .lock-msg { color: #fff; font-size: 14px; font-weight: 600; line-height: 1.5; max-width: 320px; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
 .admin-cat-readonly-overlay .lock-msg strong { font-weight: 800; color: #fde68a; }
 .admin-cat-tab.locked-other { position: relative; }
-.admin-cat-tab.locked-other::before { content: '🔒'; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.85; }
+.admin-cat-tab.locked-other::before { content: '🔒'; position: absolute; left: 17px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.85; }
 .admin-cat-tab.locked-other > * { padding-left: 14px; }
 
 /* sticky bottom indicator — ลอยด้านล่างหลังบ้านตอนหมวดถูก lock โดยแอดมินคนอื่น */
@@ -539,6 +552,14 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 .cart-item.unchecked { opacity: 0.45; }
 .stock-qty { font-size: 11px; color: #d97706; font-weight: 700; margin-left: 4px; }
 .stock-qty.low { color: #dc2626; }
+.layout-collapse-card { border: 1.5px solid #e5e7eb; border-radius: 12px; background: #fff; overflow: hidden; }
+.layout-collapse-toggle { width: 100%; border: none; background: #f9fafb; color: #374151; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 800; font-family: inherit; cursor: pointer; }
+.layout-collapse-toggle:hover { background: #f3f4f6; }
+.layout-collapse-toggle .toggle-title { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.layout-collapse-toggle .ic { width: 1.1em; height: 1.1em; transition: transform 0.18s; }
+.layout-collapse-card.open .layout-collapse-toggle .ic { transform: rotate(180deg); }
+.layout-collapse-body { display: none; padding: 14px; border-top: 1px solid #eef2f7; }
+.layout-collapse-card.open .layout-collapse-body { display: block; }
 .layout-tabs { display: flex; gap: 0; border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
 .layout-tab-btn { flex: 1; padding: 9px 12px; background: #fff; border: none; cursor: pointer; font-size: 13px; font-weight: 600; color: #6b7280; font-family: inherit; transition: all 0.15s; }
 .layout-tab-btn:not(:last-child) { border-right: 1.5px solid #e5e7eb; }
@@ -562,19 +583,27 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 .admin-cat-layout { display: flex; gap: 14px; align-items: flex-start; }
 .admin-cat-sidebar { flex: 0 0 180px; min-width: 0; position: sticky; top: 70px; align-self: flex-start; }
 .admin-cat-tabs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; max-height: 60vh; overflow-y: auto; padding-right: 2px; }
-.admin-cat-tab { padding: 10px 12px; background: #f9fafb; border: 1.5px solid #e5e7eb; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; color: #374151; font-family: inherit; text-align: left; transition: background 0.15s, border-color 0.15s, color 0.15s; display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; width: 100%; }
+.admin-cat-tab { position: relative; padding: 10px 12px 10px 24px; background: #f9fafb; border: 1.5px solid #e5e7eb; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; color: #374151; font-family: inherit; text-align: left; transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s; display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; width: 100%; }
 .admin-cat-tab:hover { background: #f3f4f6; border-color: #9ca3af; }
 .admin-cat-tab.active { background: #1f2937; border-color: #1f2937; color: #fff; }
+.admin-cat-tab.dragging { opacity: 0.55; border-style: dashed; }
+.admin-cat-drag-handle { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 10px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: grab; color: #c7ccd4; }
+.admin-cat-drag-handle:active { cursor: grabbing; }
+.admin-cat-drag-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; display: block; }
+.admin-cat-tab:hover .admin-cat-drag-handle, .admin-cat-tab.active .admin-cat-drag-handle { color: currentColor; opacity: 0.65; }
 .admin-cat-tab .cat-tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-cat-tab .cat-tab-count { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
 .admin-cat-content { flex: 1; min-width: 0; }
 .admin-cat-empty { padding: 40px 20px; text-align: center; color: #9ca3af; font-size: 13px; border: 1px dashed #d1d5db; border-radius: 10px; }
+.admin-cat-code-grid { display: grid; grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1.3fr); gap: 10px; }
+.admin-prod-list { min-height: 12px; }
 /* Mobile (จอแคบ) — เปลี่ยน sidebar เป็น horizontal tab strip ด้านบน */
 @media (max-width: 599px) {
     .admin-cat-layout { flex-direction: column; gap: 10px; }
     .admin-cat-sidebar { flex: 0 0 auto; width: 100%; position: static; }
     .admin-cat-tabs { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
     .admin-cat-tab { flex: 0 0 auto; min-width: 130px; max-width: 220px; }
+    .admin-prod-meta-row, .admin-cat-code-grid { grid-template-columns: 1fr; }
 }
 
 .promo-imgs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
@@ -912,46 +941,51 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 </div>
             </div>
 
-            <div>
-                <div class="admin-field-label" style="margin-bottom:12px;">ปรับแต่งรูปร่าง Card</div>
-                <div class="layout-tabs">
-                    <button class="layout-tab-btn active" id="layoutTabMob" data-action="switchLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-mobile"/></svg> มือถือ</button>
-                    <button class="layout-tab-btn" id="layoutTabDsk" data-action="switchLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-desktop"/></svg> คอมพิวเตอร์</button>
-                </div>
-                <div class="layout-tab-pane active" id="layoutPane-mob">
-                    <div class="ui-sliders-grid">
-                        <div class="slider-row"><div class="slider-label">ความโค้ง (Radius) <span id="valRadius">18px</span></div><input type="range" id="sliderRadius" min="0" max="40" value="18"></div>
-                        <div class="slider-row"><div class="slider-label">ความโค้งรูป <span id="valInnerRadius">14px</span></div><input type="range" id="sliderInnerRadius" min="0" max="40" value="14"></div>
-                        <div class="slider-row"><div class="slider-label">เงา (Shadow) <span id="valShadow">10</span></div><input type="range" id="sliderShadow" min="0" max="100" value="10"></div>
-                        <div class="slider-row"><div class="slider-label">Padding รอบ Card <span id="valPadding">10px</span></div><input type="range" id="sliderPadding" min="4" max="100" value="10"></div>
-                        <div class="slider-row"><div class="slider-label">Columns <span id="valColsMob">2</span></div><input type="range" id="sliderColsMob" min="1" max="2" value="2" step="1"></div>
-                        <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapMob">12px</span></div><input type="range" id="sliderGapMob" min="4" max="40" value="12"></div>
+            <div class="layout-collapse-card" id="cardShapePanel">
+                <button class="layout-collapse-toggle" type="button" data-action="toggleCardShape" aria-expanded="false">
+                    <span class="toggle-title">ปรับแต่งรูปร่าง Card</span>
+                    <svg class="ic"><use href="#ic-chev-down"/></svg>
+                </button>
+                <div class="layout-collapse-body" id="cardShapeBody">
+                    <div class="layout-tabs">
+                        <button class="layout-tab-btn active" id="layoutTabMob" data-action="switchLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-mobile"/></svg> มือถือ</button>
+                        <button class="layout-tab-btn" id="layoutTabDsk" data-action="switchLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-desktop"/></svg> คอมพิวเตอร์</button>
                     </div>
-                    <button class="layout-save-tab-btn" id="saveLayoutMobBtn" data-action="saveLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่ามือถือ</button>
-                </div>
-                <div class="layout-tab-pane" id="layoutPane-dsk">
-                    <div class="ui-sliders-grid">
-                        <div class="slider-row"><div class="slider-label">ความโค้ง (Radius) <span id="valRadiusDsk">18px</span></div><input type="range" id="sliderRadiusDsk" min="0" max="40" value="18"></div>
-                        <div class="slider-row"><div class="slider-label">ความโค้งรูป <span id="valInnerRadiusDsk">14px</span></div><input type="range" id="sliderInnerRadiusDsk" min="0" max="40" value="14"></div>
-                        <div class="slider-row"><div class="slider-label">เงา (Shadow) <span id="valShadowDsk">10</span></div><input type="range" id="sliderShadowDsk" min="0" max="100" value="10"></div>
-                        <div class="slider-row"><div class="slider-label">Padding รอบ Card <span id="valPaddingDsk">10px</span></div><input type="range" id="sliderPaddingDsk" min="4" max="100" value="10"></div>
-                        <div class="slider-row"><div class="slider-label">Columns <span id="valColsDsk">4</span></div><input type="range" id="sliderColsDsk" min="2" max="6" value="4" step="1"></div>
-                        <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapDsk">18px</span></div><input type="range" id="sliderGapDsk" min="4" max="60" value="18"></div>
+                    <div class="layout-tab-pane active" id="layoutPane-mob">
+                        <div class="ui-sliders-grid">
+                            <div class="slider-row"><div class="slider-label">ความโค้ง (Radius) <span id="valRadius">18px</span></div><input type="range" id="sliderRadius" min="0" max="40" value="18"></div>
+                            <div class="slider-row"><div class="slider-label">ความโค้งรูป <span id="valInnerRadius">14px</span></div><input type="range" id="sliderInnerRadius" min="0" max="40" value="14"></div>
+                            <div class="slider-row"><div class="slider-label">เงา (Shadow) <span id="valShadow">10</span></div><input type="range" id="sliderShadow" min="0" max="100" value="10"></div>
+                            <div class="slider-row"><div class="slider-label">Padding รอบ Card <span id="valPadding">10px</span></div><input type="range" id="sliderPadding" min="4" max="100" value="10"></div>
+                            <div class="slider-row"><div class="slider-label">Columns <span id="valColsMob">2</span></div><input type="range" id="sliderColsMob" min="1" max="2" value="2" step="1"></div>
+                            <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapMob">12px</span></div><input type="range" id="sliderGapMob" min="4" max="40" value="12"></div>
+                        </div>
+                        <button class="layout-save-tab-btn" id="saveLayoutMobBtn" data-action="saveLayoutTab" data-tab="mob"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่ามือถือ</button>
                     </div>
-                    <button class="layout-save-tab-btn" id="saveLayoutDskBtn" data-action="saveLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่าคอมพิวเตอร์</button>
-                </div>
-                <div class="card-preview-strip">
-                    <div class="card-preview-strip-title">ตัวอย่าง Card</div>
-                    <div class="card-preview-wrap">
-                        <div class="card-preview-mini" id="cardPreviewMini">
-                            <div class="card-preview-inner" id="cardPreviewInner"><svg class="ic ic-2x"><use href="#ic-paw"/></svg></div>
-                            <div class="card-preview-line"></div>
-                            <div class="card-preview-line short"></div>
-                            <div class="card-preview-btn" id="cardPreviewBtn"></div>
+                    <div class="layout-tab-pane" id="layoutPane-dsk">
+                        <div class="ui-sliders-grid">
+                            <div class="slider-row"><div class="slider-label">ความโค้ง (Radius) <span id="valRadiusDsk">18px</span></div><input type="range" id="sliderRadiusDsk" min="0" max="40" value="18"></div>
+                            <div class="slider-row"><div class="slider-label">ความโค้งรูป <span id="valInnerRadiusDsk">14px</span></div><input type="range" id="sliderInnerRadiusDsk" min="0" max="40" value="14"></div>
+                            <div class="slider-row"><div class="slider-label">เงา (Shadow) <span id="valShadowDsk">10</span></div><input type="range" id="sliderShadowDsk" min="0" max="100" value="10"></div>
+                            <div class="slider-row"><div class="slider-label">Padding รอบ Card <span id="valPaddingDsk">10px</span></div><input type="range" id="sliderPaddingDsk" min="4" max="100" value="10"></div>
+                            <div class="slider-row"><div class="slider-label">Columns <span id="valColsDsk">4</span></div><input type="range" id="sliderColsDsk" min="2" max="6" value="4" step="1"></div>
+                            <div class="slider-row"><div class="slider-label">Gap ระหว่าง Card <span id="valGapDsk">18px</span></div><input type="range" id="sliderGapDsk" min="4" max="60" value="18"></div>
+                        </div>
+                        <button class="layout-save-tab-btn" id="saveLayoutDskBtn" data-action="saveLayoutTab" data-tab="dsk"><svg class="ic"><use href="#ic-save"/></svg> บันทึกตั้งค่าคอมพิวเตอร์</button>
+                    </div>
+                    <div class="card-preview-strip">
+                        <div class="card-preview-strip-title">ตัวอย่าง Card</div>
+                        <div class="card-preview-wrap">
+                            <div class="card-preview-mini" id="cardPreviewMini">
+                                <div class="card-preview-inner" id="cardPreviewInner"><svg class="ic ic-2x"><use href="#ic-paw"/></svg></div>
+                                <div class="card-preview-line"></div>
+                                <div class="card-preview-line short"></div>
+                                <div class="card-preview-btn" id="cardPreviewBtn"></div>
+                            </div>
                         </div>
                     </div>
+                    <button class="layout-save-tab-btn" id="saveTemplateDraftBtn" style="margin-top:12px;"><svg class="ic"><use href="#ic-check"/></svg> บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)</button>
                 </div>
-                <button class="layout-save-tab-btn" id="saveTemplateDraftBtn" style="margin-top:12px;"><svg class="ic"><use href="#ic-check"/></svg> บันทึก Template นี้ไว้ก่อน (ยังไม่ sync)</button>
             </div>
         </div>
 
@@ -1353,6 +1387,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     let currentTemplate = 'double';
     let activeAdminCatId = null; // หมวดที่ admin กำลังเปิดดู/แก้ไข (ใช้ใน sidebar layout)
     let adminDirty = false; // true เมื่อ admin มีการแก้ไขที่ยังไม่กด "บันทึกทั้งหมด" — ใช้เตือนตอนเผลอปิด
+    let adminDragState = null;
     let logoDataUrl = ''; // โลโก้ navbar
     let splashLogoData = ''; // ★ โลโก้ splash screen (แยกจาก navbar)
     const customerId = 'CUS-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -1782,7 +1817,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             <h3 style="font-size:18px; color:#111; margin-bottom:8px; line-height:1.4;">${esc(p.name)}</h3>
             ${p.detail ? `<p style="font-size:13px; color:#6b7280; margin-bottom:12px; line-height:1.5;">${esc(p.detail)}</p>` : ''}
             ${stockHtml}
-            <div style="font-size:22px; font-weight:bold; color:var(--theme-color); margin-bottom:15px;" id="popupPrice-${esc(p.id)}">฿${defPrice.toLocaleString()}</div>
+            <div style="font-size:22px; font-weight:bold; color:var(--color-card-price, #dc2626); margin-bottom:15px;" id="popupPrice-${esc(p.id)}">฿${defPrice.toLocaleString()}</div>
             ${p.sizes.length ? `<div style="margin-bottom:15px;"><div style="font-size:12px; color:#6b7280; margin-bottom:5px; font-weight:bold;">เลือกขนาด</div><div style="display:flex; gap:8px; flex-wrap:wrap;">${sizeHtml}</div></div>` : ''}
             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; padding-top:15px; border-top:1px solid #f3f4f6;">
                 <div class="qty-ctrl" style="border:1.5px solid #e5e7eb; border-radius:10px; display:flex; align-items:center; padding:4px;">
@@ -2590,6 +2625,74 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         renderCatalog(); renderNav(); renderColorSwatches(); renderAdminCategories(); syncSliders();
     }
 
+    function idsInOrder(list) {
+        return (list || []).map(item => String(item && item.id || ''));
+    }
+
+    function sameStringList(a, b) {
+        a = a || []; b = b || [];
+        if (a.length !== b.length) return false;
+        return a.every((val, idx) => String(val) === String(b[idx]));
+    }
+
+    function productOrderByCategory(list) {
+        const out = {};
+        (list || []).forEach(p => {
+            const catId = String(p && p.catId || '');
+            if (!catId) return;
+            if (!out[catId]) out[catId] = [];
+            out[catId].push(String(p.id || ''));
+        });
+        return out;
+    }
+
+    function sortByIdOrder(list, order) {
+        const byId = new Map((list || []).map(item => [String(item.id), item]));
+        const used = new Set();
+        const sorted = [];
+        (order || []).forEach(id => {
+            id = String(id);
+            if (byId.has(id) && !used.has(id)) {
+                sorted.push(byId.get(id));
+                used.add(id);
+            }
+        });
+        (list || []).forEach(item => {
+            const id = String(item.id);
+            if (!used.has(id)) sorted.push(item);
+        });
+        return sorted;
+    }
+
+    function orderProductsForAdmin(list, orderByCategory, categoryOrder) {
+        const byCat = new Map();
+        (list || []).forEach(p => {
+            const catId = String(p && p.catId || '');
+            if (!byCat.has(catId)) byCat.set(catId, []);
+            byCat.get(catId).push(p);
+        });
+        const catOrder = [];
+        const seenCats = new Set();
+        const addCat = id => {
+            id = String(id || '');
+            if (!seenCats.has(id)) {
+                seenCats.add(id);
+                catOrder.push(id);
+            }
+        };
+        (categoryOrder || categories.map(c => c.id)).forEach(addCat);
+        (list || []).forEach(p => addCat(p && p.catId));
+        const out = [];
+        catOrder.forEach(catId => {
+            let catProducts = byCat.get(catId) || [];
+            if (orderByCategory && Array.isArray(orderByCategory[catId])) {
+                catProducts = sortByIdOrder(catProducts, orderByCategory[catId]);
+            }
+            out.push(...catProducts);
+        });
+        return out;
+    }
+
     function buildAdminPatch() {
         const base = adminBaselineSnapshot || { products: [], categories: [], settings: {}, banksList: [], qrsList: [] };
         const patch = {
@@ -2606,6 +2709,16 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         (base.products || []).forEach(p => {
             if (!currentProducts.has(String(p.id))) patch.products.delete.push(p.id);
         });
+        const baseProductOrders = productOrderByCategory(base.products || []);
+        const currentProductOrders = productOrderByCategory(products);
+        const orderCats = new Set([...Object.keys(baseProductOrders), ...Object.keys(currentProductOrders)]);
+        orderCats.forEach(catId => {
+            const nextOrder = currentProductOrders[catId] || [];
+            if (!sameStringList(baseProductOrders[catId] || [], nextOrder)) {
+                if (!patch.products.orderByCategory) patch.products.orderByCategory = {};
+                patch.products.orderByCategory[catId] = nextOrder.slice();
+            }
+        });
 
         const baseCategories = new Map((base.categories || []).map(c => [String(c.id), c]));
         const currentCategories = new Map(categories.map(c => [String(c.id), c]));
@@ -2616,6 +2729,11 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         (base.categories || []).forEach(c => {
             if (!currentCategories.has(String(c.id))) patch.categories.delete.push(c.id);
         });
+        const currentCategoryOrder = idsInOrder(categories);
+        if (!sameStringList(idsInOrder(base.categories || []), currentCategoryOrder)) {
+            patch.categories.order = currentCategoryOrder;
+            if (!patch.products.categoryOrder) patch.products.categoryOrder = currentCategoryOrder.slice();
+        }
 
         const settings = collectSettings();
         if (stableAdminJson(settings) !== stableAdminJson(base.settings || {}) ||
@@ -2626,15 +2744,15 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             patch.qrsList = cloneAdminData(qrData) || [];
         }
 
-        if (!patch.products.upsert.length && !patch.products.delete.length) delete patch.products;
-        if (!patch.categories.upsert.length && !patch.categories.delete.length) delete patch.categories;
+        if (!patch.products.upsert.length && !patch.products.delete.length && !patch.products.orderByCategory && !patch.products.categoryOrder) delete patch.products;
+        if (!patch.categories.upsert.length && !patch.categories.delete.length && !patch.categories.order) delete patch.categories;
         return patch;
     }
 
     function hasAdminPatchChanges(patch) {
         return !!(patch && (
-            (patch.products && ((patch.products.upsert || []).length || (patch.products.delete || []).length)) ||
-            (patch.categories && ((patch.categories.upsert || []).length || (patch.categories.delete || []).length)) ||
+            (patch.products && ((patch.products.upsert || []).length || (patch.products.delete || []).length || patch.products.orderByCategory || patch.products.categoryOrder)) ||
+            (patch.categories && ((patch.categories.upsert || []).length || (patch.categories.delete || []).length || patch.categories.order)) ||
             patch.settings
         ));
     }
@@ -2649,6 +2767,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 if (idx >= 0) categories[idx] = cloneAdminData(next);
                 else categories.push(cloneAdminData(next));
             });
+            if (Array.isArray(patch.categories.order)) categories = sortByIdOrder(categories, patch.categories.order);
         }
         if (patch.products) {
             const del = new Set((patch.products.delete || []).map(String));
@@ -2658,6 +2777,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 if (idx >= 0) products[idx] = cloneAdminData(next);
                 else products.push(cloneAdminData(next));
             });
+            products = orderProductsForAdmin(products, patch.products.orderByCategory, patch.products.categoryOrder);
         }
         if (patch.settings) applyLoadedSettings(patch.settings);
         filteredProducts = products.slice();
@@ -2797,10 +2917,13 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 add('product', id);
                 add('category', getProductCategoryId(id));
             });
+            if (patch.products.orderByCategory) Object.keys(patch.products.orderByCategory).forEach(catId => add('category', catId));
+            if (patch.products.categoryOrder) add('settings', 'category-order');
         }
         if (patch && patch.categories) {
             (patch.categories.upsert || []).forEach(c => add('category', c && c.id));
             (patch.categories.delete || []).forEach(id => add('category', id));
+            if (patch.categories.order) add('settings', 'category-order');
         }
         if (patch && patch.settings) add('settings', 'global');
         return resources;
@@ -3265,6 +3388,16 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         $('sliderGapDsk').value = ld.gap; $('valGapDsk').textContent = ld.gap + 'px';
     }
 
+    function toggleCardShapePanel() {
+        const panel = $('cardShapePanel');
+        if (!panel) return;
+        const open = !panel.classList.contains('open');
+        panel.classList.toggle('open', open);
+        const btn = panel.querySelector('.layout-collapse-toggle');
+        if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) updatePreviewCard();
+    }
+
     function switchLayoutTab(tab) {
         activeLayoutTab = tab;
         ['mob','dsk'].forEach(t => { $('layoutTab' + (t === 'mob' ? 'Mob' : 'Dsk')).classList.toggle('active', t === tab); $('layoutPane-' + t).classList.toggle('active', t === tab); });
@@ -3321,6 +3454,37 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
        - renderAdminCatContent()    : เนื้อหาฝั่งขวา = สินค้าของ activeAdminCatId
        - selectAdminCat(catId)      : เปลี่ยนหมวดที่ดูอยู่ — re-render content + อัพเดท active tab
     */
+    function nextSequentialId(prefix, list) {
+        let max = 0;
+        const re = new RegExp('^' + prefix + '(\\d+)$');
+        (list || []).forEach(item => {
+            const raw = typeof item === 'string' ? item : (item && item.id);
+            const m = String(raw || '').match(re);
+            if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+        });
+        return prefix + (max + 1);
+    }
+
+    function nextCategoryId() {
+        return nextSequentialId('cat', categories);
+    }
+
+    function nextProductId() {
+        const used = new Set(products.map(p => String(p.id || '')));
+        let max = products.length;
+        products.forEach(p => {
+            const m = String(p.id || '').match(/^p(\d{1,5})$/);
+            if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+        });
+        let n = max + 1;
+        while (used.has('p' + n)) n++;
+        return 'p' + n;
+    }
+
+    function categoryOptionsHtml(selectedId) {
+        return categories.map(cat => `<option value="${esc(cat.id)}"${String(cat.id) === String(selectedId) ? ' selected' : ''}>${esc(cat.id)} — ${esc(cat.name)}</option>`).join('');
+    }
+
     function renderAdminCategories() {
         // ตั้ง active default: หมวดแรก ถ้า activeAdminCatId ปัจจุบันไม่อยู่ใน list แล้ว
         if (!categories.some(c => c.id === activeAdminCatId)) {
@@ -3344,6 +3508,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             tab.dataset.action = 'selectAdminCat';
             tab.dataset.catId = cat.id;
             tab.innerHTML =
+                `<span class="admin-cat-drag-handle" draggable="true" data-drag-type="category" data-cat-id="${esc(cat.id)}" title="ลากเพื่อย้ายหมวด"><span class="admin-cat-drag-dot"></span></span>` +
                 `<span class="cat-tab-name" id="catname-tab-${esc(cat.id)}">${esc(cat.name)}</span>` +
                 `<span class="cat-tab-count" id="cnt-tab-${esc(cat.id)}">${count}</span>`;
             tabs.appendChild(tab);
@@ -3368,11 +3533,17 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 `<div><button class="btn-delete-cat" data-action="deleteCategory" data-cat-id="${esc(cat.id)}">ลบ</button></div>` +
             '</div>' +
             `<div class="admin-cat-body open" id="admin-cat-${esc(cat.id)}">` +
-                '<div class="admin-field-row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">' +
-                    '<span class="admin-field-label">ชื่อหมวดหมู่</span>' +
-                    `<input class="admin-input" type="text" value="${esc(cat.name)}" data-action="updateCatName" data-cat-id="${esc(cat.id)}">` +
+                '<div class="admin-cat-code-grid" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">' +
+                    '<div class="admin-field-row" style="margin-bottom:0;">' +
+                        '<span class="admin-field-label">รหัสหมวด</span>' +
+                        `<input class="admin-input" type="text" value="${esc(cat.id)}" data-action="updateCategoryId" data-cat-id="${esc(cat.id)}" spellcheck="false">` +
+                    '</div>' +
+                    '<div class="admin-field-row" style="margin-bottom:0;">' +
+                        '<span class="admin-field-label">ชื่อหมวดหมู่</span>' +
+                        `<input class="admin-input" type="text" value="${esc(cat.name)}" data-action="updateCatName" data-cat-id="${esc(cat.id)}">` +
+                    '</div>' +
                 '</div>' +
-                `<div id="admin-prods-${esc(cat.id)}"></div>` +
+                `<div class="admin-prod-list" id="admin-prods-${esc(cat.id)}" data-cat-id="${esc(cat.id)}"></div>` +
                 `<button class="admin-add-prod-btn" data-action="addProduct" data-cat-id="${esc(cat.id)}">${iconHTML('plus')} เพิ่มสินค้าในหมวดนี้</button>` +
             '</div>';
         el.appendChild(block);
@@ -3413,13 +3584,28 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
     function buildAdminCard(p) {
         const card = document.createElement('div'); card.className = 'admin-prod-card'; card.id = 'admin-prod-' + p.id;
+        card.dataset.pid = p.id;
+        card.dataset.catId = p.catId;
         const hasImg = !!p.image; const urlVal = (p.image && !p.image.startsWith('data:')) ? esc(p.image) : '';
         card.innerHTML =
             '<div class="admin-prod-top">' +
-                `<input class="admin-prod-name-input" type="text" value="${esc(p.name)}" placeholder="ชื่อสินค้า" data-action="updateField" data-pid="${esc(p.id)}" data-field="name">` +
+                '<div class="admin-prod-title-wrap">' +
+                    `<button type="button" class="admin-prod-drag" draggable="true" data-drag-type="product" data-pid="${esc(p.id)}" data-cat-id="${esc(p.catId)}" title="ลากเพื่อย้ายลำดับสินค้า" aria-label="ลากเพื่อย้ายลำดับสินค้า"><span class="admin-drag-dots"><span></span><span></span><span></span></span></button>` +
+                    `<input class="admin-prod-name-input" type="text" value="${esc(p.name)}" placeholder="ชื่อสินค้า" data-action="updateField" data-pid="${esc(p.id)}" data-field="name">` +
+                '</div>' +
                 '<div style="display:flex;gap:6px;">' +
                     `<button class="admin-dup-btn" data-action="duplicateProduct" data-pid="${esc(p.id)}" title="ทำซ้ำสินค้า (คัดลอกการตั้งค่า ไม่รวมรูป/สต็อก)">${iconHTML('copy')} ทำซ้ำ</button>` +
                     `<button class="admin-delete-btn" data-action="deleteProduct" data-pid="${esc(p.id)}">ลบ</button>` +
+                '</div>' +
+            '</div>' +
+            '<div class="admin-prod-meta-row">' +
+                '<div class="admin-prod-meta-box">' +
+                    '<span class="admin-prod-meta-label">Product ID</span>' +
+                    `<span class="admin-prod-id-text">${esc(p.id)}</span>` +
+                '</div>' +
+                '<div class="admin-prod-meta-box">' +
+                    '<span class="admin-prod-meta-label">หมวด (CatID)</span>' +
+                    `<select class="admin-prod-cat-select" data-action="updateProductCategory" data-pid="${esc(p.id)}">${categoryOptionsHtml(p.catId)}</select>` +
                 '</div>' +
             '</div>' +
             '<div class="admin-field-row"><span class="admin-field-label">รายละเอียด</span>' +
@@ -3512,7 +3698,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         markAdminDirty({ type: 'product', id: pid });
     }
     function addProduct(catId) {
-        const newId = 'p' + Date.now();
+        const newId = nextProductId();
         const prod = { id: newId, catId, name: 'สินค้าใหม่', detail: '', sizes: [{ label: '200ml', price: 0 }], inStock: true, image: '' };
         products.push(prod);
         const prodsEl = $('admin-prods-' + catId); if (prodsEl) prodsEl.appendChild(buildAdminCard(prod));
@@ -3524,7 +3710,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
     }
     function duplicateProduct(pid) {
         const src = products.find(x => x.id === pid); if (!src) return;
-        const newId = 'p' + Date.now();
+        const newId = nextProductId();
         // คัดลอก settings (ชื่อ, รายละเอียด, ขนาด/ราคา) แต่ไม่เอารูปและ stock
         const dup = {
             id: newId,
@@ -3536,7 +3722,9 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             stock: 0,
             image: ''
         };
-        products.push(dup);
+        const srcIdx = products.findIndex(x => x.id === pid);
+        if (srcIdx >= 0) products.splice(srcIdx + 1, 0, dup);
+        else products.push(dup);
         const prodsEl = $('admin-prods-' + src.catId);
         // แทรกไว้หลัง card ต้นฉบับ
         if (prodsEl) {
@@ -3575,8 +3763,71 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         markAdminDirty({ type: 'category', id: catId });
     }
 
+    function updateCategoryId(oldCatId, rawValue) {
+        const newCatId = String(rawValue || '').trim();
+        const cat = categories.find(c => String(c.id) === String(oldCatId));
+        if (!cat) return;
+        if (!newCatId) { showToast('รหัสหมวดห้ามว่าง'); renderAdminCategories(); return; }
+        if (newCatId === oldCatId) return;
+        if (categories.some(c => String(c.id) === newCatId)) {
+            showToast('รหัสหมวดนี้มีอยู่แล้ว');
+            renderAdminCategories();
+            return;
+        }
+        cat.id = newCatId;
+        products.forEach(p => {
+            if (String(p.catId) === String(oldCatId)) {
+                p.catId = newCatId;
+                markAdminDirty({ type: 'product', id: p.id });
+            }
+        });
+        if (activeAdminCatId === oldCatId) activeAdminCatId = newCatId;
+        markAdminDirty({ type: 'category', id: oldCatId });
+        touchAdminResource('category', newCatId);
+        renderAdminCategories();
+        renderNav();
+        showToast('เปลี่ยนรหัสหมวดแล้ว');
+    }
+
+    function updateProductCategory(pid, newCatId) {
+        const p = products.find(x => String(x.id) === String(pid));
+        if (!p || !categories.some(c => String(c.id) === String(newCatId))) return;
+        const oldCatId = p.catId;
+        if (String(oldCatId) === String(newCatId)) return;
+        p.catId = newCatId;
+        markAdminDirty({ type: 'product', id: pid });
+        if (oldCatId) touchAdminResource('category', oldCatId);
+        touchAdminResource('category', newCatId);
+        activeAdminCatId = newCatId;
+        renderAdminCategories();
+        renderNav();
+        showToast('ย้ายสินค้าไปหมวดใหม่แล้ว');
+    }
+
+    function applyProductDomOrder(catId) {
+        const list = $('admin-prods-' + catId); if (!list) return;
+        const ids = Array.from(list.querySelectorAll('.admin-prod-card')).map(el => el.dataset.pid).filter(Boolean);
+        const ordered = sortByIdOrder(products.filter(p => String(p.catId) === String(catId)), ids);
+        const rest = products.filter(p => String(p.catId) !== String(catId));
+        products = orderProductsForAdmin([...rest, ...ordered], { [catId]: ids }, categories.map(c => c.id));
+        markAdminDirty({ type: 'category', id: catId });
+        showToast('จัดลำดับสินค้าแล้ว');
+    }
+
+    function applyCategoryDomOrder() {
+        const tabs = $('adminCatTabs'); if (!tabs) return;
+        const ids = Array.from(tabs.querySelectorAll('.admin-cat-tab')).map(el => el.dataset.catId).filter(Boolean);
+        categories = sortByIdOrder(categories, ids);
+        products = orderProductsForAdmin(products, null, categories.map(c => c.id));
+        markAdminDirty({ type: 'settings', id: 'category-order' });
+        renderAdminCatTabs();
+        renderNav();
+        if (typeof applyOtherAdminLocksToUi === 'function') applyOtherAdminLocksToUi();
+        showToast('จัดลำดับหมวดหมู่แล้ว');
+    }
+
     function addCategory() {
-        const newId = 'cat-' + Date.now(); const newCat = { id: newId, name: 'หมวดหมู่ใหม่' };
+        const newId = nextCategoryId(); const newCat = { id: newId, name: 'หมวดหมู่ใหม่' };
         categories.push(newCat);
         // auto-select หมวดที่เพิ่งสร้าง แล้ว re-render ทั้ง sidebar + content
         activeAdminCatId = newId;
@@ -3813,6 +4064,73 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         });
     }
 
+    function dragAfterElement(container, clientX, clientY, selector) {
+        const items = Array.from(container.querySelectorAll(selector));
+        const horizontal = getComputedStyle(container).flexDirection.indexOf('row') === 0;
+        return items.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = horizontal ? clientX - box.left - box.width / 2 : clientY - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) return { offset, element: child };
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+    }
+
+    function bindAdminDragHandlers() {
+        const modal = $('adminModal');
+        if (!modal) return;
+        modal.addEventListener('dragstart', e => {
+            const handle = e.target.closest('[data-drag-type]');
+            if (!handle) return;
+            if (isAdminEditTargetBlocked(handle)) {
+                e.preventDefault();
+                showToast('หมวดนี้กำลังถูกแอดมินคนอื่นแก้ไขอยู่');
+                return;
+            }
+            const type = handle.dataset.dragType;
+            adminDragState = { type, pid: handle.dataset.pid || '', catId: handle.dataset.catId || '' };
+            const ghost = type === 'category' ? handle.closest('.admin-cat-tab') : handle.closest('.admin-prod-card');
+            if (ghost) ghost.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', type + ':' + (adminDragState.pid || adminDragState.catId));
+            }
+        });
+        modal.addEventListener('dragover', e => {
+            if (!adminDragState) return;
+            if (adminDragState.type === 'product') {
+                const list = e.target.closest('.admin-prod-list');
+                if (!list || String(list.dataset.catId) !== String(adminDragState.catId)) return;
+                e.preventDefault();
+                const dragging = modal.querySelector('.admin-prod-card.dragging');
+                if (!dragging) return;
+                const after = dragAfterElement(list, e.clientX, e.clientY, '.admin-prod-card:not(.dragging)');
+                if (after) list.insertBefore(dragging, after);
+                else list.appendChild(dragging);
+            } else if (adminDragState.type === 'category') {
+                const tabs = e.target.closest('#adminCatTabs');
+                if (!tabs) return;
+                e.preventDefault();
+                const dragging = modal.querySelector('.admin-cat-tab.dragging');
+                if (!dragging) return;
+                const after = dragAfterElement(tabs, e.clientX, e.clientY, '.admin-cat-tab:not(.dragging)');
+                if (after) tabs.insertBefore(dragging, after);
+                else tabs.appendChild(dragging);
+            }
+        });
+        modal.addEventListener('drop', e => {
+            if (!adminDragState) return;
+            e.preventDefault();
+            if (adminDragState.type === 'product') applyProductDomOrder(adminDragState.catId);
+            if (adminDragState.type === 'category') applyCategoryDomOrder();
+            modal.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            adminDragState = null;
+        });
+        modal.addEventListener('dragend', () => {
+            modal.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            adminDragState = null;
+        });
+    }
+
     /* ============================================================
        EVENT BINDINGS
        ============================================================ */
@@ -3877,6 +4195,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
 
         bindSliders();
         bindScrollToggle();
+        bindAdminDragHandlers();
         document.body.addEventListener('click', handleDelegatedClick);
         document.body.addEventListener('change', handleDelegatedChange);
         document.body.addEventListener('input', handleDelegatedInput);
@@ -3971,6 +4290,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             case 'adminStockStep':  adminStockStep(pid, parseInt(delta, 10)); break;
             case 'setTemplate':     setTemplate(tpl); break;
             case 'addCategory':     addCategory(); break;
+            case 'toggleCardShape': toggleCardShapePanel(); break;
             case 'switchLayoutTab': switchLayoutTab(tab); break;
             case 'saveLayoutTab':   saveLayoutTab(tab); break;
             case 'saveTemplateDraft': saveTemplateDraft(); break;
@@ -3999,7 +4319,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             showToast('หมวดนี้กำลังถูกแอดมินคนอื่นแก้ไขอยู่');
             return;
         }
-        const { action, pid, idx, field } = target.dataset;
+        const { action, pid, idx, field, catId } = target.dataset;
         switch (action) {
             case 'updateField':     updateField(pid, field, target.value); break;
             case 'updateImgUrl':    updateImgUrl(pid, target.value); break;
@@ -4007,6 +4327,8 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
             case 'updateSizeLabel': updateSizeLabel(pid, parseInt(idx, 10), target.value); break;
             case 'updateSizePrice': updateSizePrice(pid, parseInt(idx, 10), target.value); break;
             case 'updateStock':     updateStock(pid, target.value); break;
+            case 'updateProductCategory': updateProductCategory(pid, target.value); break;
+            case 'updateCategoryId': updateCategoryId(catId, target.value); break;
         }
     }
     function handleDelegatedInput(e) {
