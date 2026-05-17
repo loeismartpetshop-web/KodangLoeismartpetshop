@@ -4075,6 +4075,30 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
         }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
     }
 
+    function moveDraggedElementByCardStep(container, dragging, clientX, clientY, selector) {
+        if (!container || !dragging) return false;
+        const hit = document.elementFromPoint(clientX, clientY);
+        const target = hit ? hit.closest(selector) : null;
+        if (!target || target === dragging || !container.contains(target)) return false;
+
+        const box = target.getBoundingClientRect();
+        const horizontal = getComputedStyle(container).flexDirection.indexOf('row') === 0;
+        const insertBeforeTarget = horizontal
+            ? clientX < box.left + box.width / 2
+            : clientY < box.top + box.height / 2;
+
+        if (insertBeforeTarget) {
+            if (dragging.nextSibling === target) return false;
+            container.insertBefore(dragging, target);
+            return true;
+        }
+
+        const next = target.nextSibling;
+        if (next === dragging) return false;
+        container.insertBefore(dragging, next);
+        return true;
+    }
+
     function bindAdminDragHandlers() {
         const modal = $('adminModal');
         if (!modal) return;
@@ -4103,9 +4127,7 @@ body.tpl-square .card-preview-btn { border-radius: 0 !important; }
                 e.preventDefault();
                 const dragging = modal.querySelector('.admin-prod-card.dragging');
                 if (!dragging) return;
-                const after = dragAfterElement(list, e.clientX, e.clientY, '.admin-prod-card:not(.dragging)');
-                if (after) list.insertBefore(dragging, after);
-                else list.appendChild(dragging);
+                moveDraggedElementByCardStep(list, dragging, e.clientX, e.clientY, '.admin-prod-card:not(.dragging)');
             } else if (adminDragState.type === 'category') {
                 const tabs = e.target.closest('#adminCatTabs');
                 if (!tabs) return;
